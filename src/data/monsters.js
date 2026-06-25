@@ -285,7 +285,7 @@ for (const g of GRADE_WORLDS) {
       const role = ROLES[prof.role] || ROLES.normal;
       const minLv = minLvFor(gi);                 // 学年内で Lv1〜UNIT_MAX_LV に配分
       const playerAtk = playerAtkForLevel(minLv); // 推奨レベルでのプレイヤー攻撃力（二次関数的）
-      const hits = 5 + (unitsInGrade > 1 ? gi / (unitsInGrade - 1) : 0); // 序盤5発→終盤6発
+      const hits = 14 + (unitsInGrade > 1 ? (gi / (unitsInGrade - 1)) * 2 : 0); // 序盤14発→終盤16発（平均≈15。コンボ/スキル併用で約10発）
       MONSTERS.push({
         id: `m_${chap.id}_${u.id}`,
         kind: "unit",

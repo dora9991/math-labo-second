@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { chaptersForGrade } from "../data/index.js";
 import { findHaichiLessonForUnit } from "../data/haichiCourse.js";
+import { CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET } from "../engine/scoring.js";
 
 // 講義（確認問題）をクリアしたか：その単元に対応する葉一レッスンの key を引いて
 //  haichiPassed（確認問題に合格した動画）に入っているかで判定する。
@@ -19,7 +20,7 @@ function lectureCleared(unitId, haichiPassed) {
 
 const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, onHaichi, onPractice, onBattle, onRelearn, onChallenge }) {
+export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onPractice, onBattle, onRelearn, onChallenge }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
@@ -59,11 +60,24 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {units.map((u) => {
           const cyc = cycleMap[u.id] || {};
-          const lectureC = lectureCleared(u.id, haichiPassed);     // 講義＝確認問題に合格
-          const tameC = (cyc.practiceN || 0) >= 1;                 // ためす＝れんしゅう/バトルで正解
-          const naosuC = (cyc.relearnN || 0) >= 1;                 // なおす＝学び直しで正解
+          const practiceN = cyc.practiceN || 0;
+          const relearnN = cyc.relearnN || 0;
+          const hasMistakes = mistakeUnitIds.includes(u.id);
+          const lectureC = lectureCleared(u.id, haichiPassed);                         // 講義＝確認問題に合格
+          const tamePct = Math.min(practiceN / CYCLE_PRACTICE_TARGET, 1);              // ためす＝15問でいっぱい
+          const tameC = practiceN >= CYCLE_PRACTICE_TARGET;
+          const naosuDone = relearnN >= CYCLE_RELEARN_TARGET || !hasMistakes;          // なおす＝直し完了 or 間違いゼロ
+          const naosuByZero = naosuDone && !hasMistakes && relearnN === 0;             // 間違いゼロで自動クリア（ほめる）
           const ouyouC = (calcKing[ch.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この章の計算王クリア
-          const cleared = !!cyc.cleared;                          // 講義+ためす+なおす＝サイクルクリア（レベル+1済み）
+          const cleared = !!cyc.cleared;                                              // 講義+ためす+なおす＝サイクルクリア
+          // 理解度メータ：講義25% / ためす50% / なおす12.5% / 応用12.5%（色は下のボタンと対応）
+          const segs = [
+            { w: 25,   fill: lectureC ? 1 : 0,  color: "#ef4444" },
+            { w: 50,   fill: tamePct,           color: "#22c55e" },
+            { w: 12.5, fill: naosuDone ? 1 : 0, color: "#6366f1" },
+            { w: 12.5, fill: ouyouC ? 1 : 0,    color: "#a855f7" },
+          ];
+          const pct = Math.round((0.25 * (lectureC ? 1 : 0) + 0.5 * tamePct + 0.125 * (naosuDone ? 1 : 0) + 0.125 * (ouyouC ? 1 : 0)) * 100);
           return (
           <div key={u.id} style={{
             background: cleared ? "rgba(253,224,71,.07)" : "rgba(255,255,255,.04)", borderRadius: 11, padding: "8px 9px",
@@ -75,6 +89,23 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               </span>
               {cleared && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#1f2937", background: "#fde047", borderRadius: 999, padding: "2px 8px" }}>🎉 サイクルクリア</span>}
             </div>
+
+            {/* 理解度メータ（講義→ためす→なおす→応用の重みづけ進捗） */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: "rgba(255,255,255,.5)", flexShrink: 0 }}>理解度</span>
+              <div style={{ flex: 1, display: "flex", gap: 3, height: 9 }}>
+                {segs.map((s, i) => (
+                  <div key={i} style={{ flexGrow: s.w, flexBasis: 0, background: "rgba(255,255,255,.09)", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ width: `${Math.round(s.fill * 100)}%`, height: "100%", background: s.color, transition: "width .4s ease" }} />
+                  </div>
+                ))}
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 900, color: pct >= 100 ? "#fde047" : "#c7d2fe", flexShrink: 0, minWidth: 26, textAlign: "right" }}>{pct}%</span>
+            </div>
+            {naosuByZero && (
+              <div style={{ fontSize: 9.5, fontWeight: 800, color: "#86efac", margin: "-2px 0 6px" }}>💯 間違いゼロ！「なおす」は直すところなし</div>
+            )}
+
             {tame === u.id ? (
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC)}
@@ -85,7 +116,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onHaichi?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                 {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
-                {stepBtn(() => onRelearn?.(), "📖 なおす", "rgba(99,102,241,.5)", naosuC)}
+                {stepBtn(() => onRelearn?.(), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
                 {stepBtn(() => onChallenge?.(), "🧮 応用", "rgba(139,92,246,.5)", ouyouC)}
               </div>
             )}

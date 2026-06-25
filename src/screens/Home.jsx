@@ -68,7 +68,7 @@ function CycleMap({ cycle }) {
 }
 
 export default function Home({
-  player, records, mistakeCount, grade = 1, onSetGrade,
+  player, records, mistakeCount, mistakeUnitIds = [], grade = 1, onSetGrade,
   mode = "adventure", onSetMode, cycle = {}, restActive = false,
   canPrestige = false, prestige = 0, onPrestige,
   onAnshin, onTimeAttack, onChallenge, onBattle, onRelearn, onDialogue, onHaichi, onUnitHaichi, onUnitPractice, onUnitBattle,
@@ -172,7 +172,7 @@ export default function Home({
               </span>
             </button>
             {cycleOpen && (
-              <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
+              <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
             )}
 
             {/* 王道サイクルの順に並べる：①講義 →②演習(れんしゅう/バトル) →③学び直し →④応用 */}

@@ -141,7 +141,7 @@ export const RELEARN_COIN_PER_CORRECT = 3;  // 学び直しの正解コイン（
 // ── マスターサイクル（王道一周）報酬：設計メモ§8柱2/§10 Step3 ──
 // 1単元を背骨(StepUp/じっくり)で解き重ねて“一周”したら一括の大報酬。
 // 「速く回す」より「丁寧に一周」がコイン/クリスタル効率で上回るようにする（飲まれ対策）。
-export const CYCLE_PRACTICE_TARGET = 1;   // ためすクリアに必要な演習の正解数
+export const CYCLE_PRACTICE_TARGET = 15;  // ためすクリアに必要な演習の正解数（≒バトル1体ぶん／あんしん1.5ラウンド）
 export const CYCLE_RELEARN_TARGET = 1;    // なおすクリアに必要な学び直しの正解数
 export const MASTER_CYCLE_COIN = 120;     // 一周クリアのコイン束（TA1回=約30〜60より厚い）
 export const MASTER_CYCLE_CRYSTAL = 1;    // 一周クリアのクリスタル（＝スキル1個ぶん。単元の数だけ集まる）

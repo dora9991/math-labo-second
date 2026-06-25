@@ -1531,6 +1531,7 @@ export default function App() {
       player={data.player}
       records={data.records}
       mistakeCount={data.mistakes.length}
+      mistakeUnitIds={[...new Set((data.mistakes || []).map((m) => m.unitId).filter(Boolean))]}
       grade={grade}
       onSetGrade={setWorld}
       onAnshin={() => goChapter("anshin")}
