@@ -109,6 +109,7 @@ export default function App() {
   const [skillGet, setSkillGet] = useState(null); // スキル入手演出（章ボス撃破）
   const [crystalGet, setCrystalGet] = useState(null); // クリスタル入手演出 { amount }
   const [gearStoneGet, setGearStoneGet] = useState(null); // 剣石・鎧石の入手演出（応用クリア）
+  const [relearnMastered, setRelearnMastered] = useState(null); // 学び直しマスター演出 { unitName, count, reward }
   const [recruitResult, setRecruitResult] = useState(null); // 仲間チャレンジの結果演出 { ok, name }
   const baitUsedRef = useRef(null); // 今のバトルで「魔物のエサ」を使った敵のid
   const [calcKingClear, setCalcKingClear] = useState(null); // 計算王クリア演出（バトル攻撃力アップ）
@@ -394,6 +395,20 @@ export default function App() {
     updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + MISTAKE_FIX_REWARD }));
     setData((d) => ({ ...d, mistakes }));
     return MISTAKE_FIX_REWARD;
+  }
+
+  // 学び直しマスター：その単元の学び直し練習で全問正解したら、その単元の間違いをまとめて消す。
+  //  （手動の「消す」ボタンは廃止＝勉強せずに消す抜け道を防ぐ。実際に解けて初めて消える。）
+  function masterRelearnUnit(unit) {
+    if (!unit?.id) return;
+    const removed = (data.mistakes || []).filter((m) => m.unitId === unit.id);
+    if (!removed.length) return; // もう間違いが無ければ何もしない
+    const reward = removed.length * MISTAKE_FIX_REWARD;
+    const mistakes = store.removeMistakesByUnit(unit.id);
+    updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + reward }));
+    setData((d) => ({ ...d, mistakes }));
+    sfx.levelUp();
+    setTimeout(() => setRelearnMastered({ unitName: unit.name, count: removed.length, reward }), 400);
   }
 
   // バトルで間違えた問題を「学び直しモード」に記録（同じ問題文は重複させない・最大40件）
@@ -1327,8 +1342,10 @@ export default function App() {
         player={data.player}
         units={[practiceUnit]}
         title={`学び直し：${practiceUnit.name}`}
-        roundSize={5}
+        roundSize={7}
+        passRate={100}
         onAttempt={(a) => recordStepAttempt({ ...a, relearn: true })}
+        onRoundEnd={({ correct, seen }) => { if (seen >= 7 && correct >= seen) masterRelearnUnit(practiceUnit); }}
         onHome={() => setScreen("relearn")}
       />
     );
@@ -1596,6 +1613,7 @@ export default function App() {
       {skillGet && <SkillGetOverlay skill={skillGet} onDone={() => setSkillGet(null)} />}
       {crystalGet && <CrystalGetOverlay amount={crystalGet.amount} onDone={() => setCrystalGet(null)} />}
       {gearStoneGet && <GearStoneGetOverlay sword={gearStoneGet.sword} armor={gearStoneGet.armor} onDone={() => setGearStoneGet(null)} />}
+      {relearnMastered && <RelearnMasteredOverlay info={relearnMastered} onDone={() => setRelearnMastered(null)} />}
       {recruitResult && <RecruitResultOverlay result={recruitResult} onDone={() => setRecruitResult(null)} />}
       {calcKingClear && (
         <CalcKingClearOverlay
@@ -1706,6 +1724,22 @@ function RecruitResultOverlay({ result, onDone }) {
           {ok ? "「なかま」画面でストックに入れて、バトルに連れていこう！"
             : condFail ? "その敵の単元を「簡単・普通・難しい」全て★1以上にすると仲間にできるよ。"
             : "もう一度エサを使って挑戦してみよう（ザコ50%/ボス25%）。"}
+        </div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
+      </div>
+    </div>
+  );
+}
+
+function RelearnMasteredOverlay({ info, onDone }) {
+  return (
+    <div onClick={onDone} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div className="glass" style={{ maxWidth: 320, padding: "26px 24px", textAlign: "center", border: "2px solid #4ade80", background: "#171536", animation: "rankUpPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", letterSpacing: 2 }}>🎓 学び直しマスター！</div>
+        <div style={{ fontSize: 50, margin: "10px 0" }}>📖✨</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "#86efac" }}>{info.unitName}</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", margin: "8px 0 4px", lineHeight: 1.5 }}>
+          7問ぜんぶ正解！この単元のまちがい{info.count}問をノートから消したよ。💰+{info.reward}
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
       </div>

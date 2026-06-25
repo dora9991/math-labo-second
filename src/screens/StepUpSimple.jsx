@@ -134,12 +134,12 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
                 {rate >= passRate ? (
                   <div style={{ padding: "12px 14px", borderRadius: 12, background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff" }}>
                     <div style={{ fontSize: 22, fontWeight: 900 }}>🏅 合格！</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%以上クリア！この動画はバッチリだね</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%でクリア！バッチリだね</div>
                   </div>
                 ) : (
                   <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(251,146,60,.18)", border: "1px solid rgba(251,146,60,.5)", color: "#fdba74" }}>
                     <div style={{ fontSize: 15, fontWeight: 900 }}>あと少しで合格！</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%以上で合格。もう一度挑戦しよう（動画を見直すのも◎）</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%で合格。もう一度ていねいに挑戦しよう</div>
                   </div>
                 )}
               </div>

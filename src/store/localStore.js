@@ -114,6 +114,14 @@ export function removeMistake(id) {
   return data.mistakes;
 }
 
+/** 間違いノートから、その単元の問題をまとめて削除（学び直しで全問正解＝マスター時に使う） */
+export function removeMistakesByUnit(unitId) {
+  const data = readAll();
+  data.mistakes = data.mistakes.filter((m) => m.unitId !== unitId);
+  writeAll(data);
+  return data.mistakes;
+}
+
 /** すべてのデータを初期状態に戻す（管理モードの「進捗リセット」用）。studentId は引き継ぐ */
 export function resetAll() {
   const data = freshData();
