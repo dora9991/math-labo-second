@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "math-labo10",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "toketa",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "../toketa", "run", "dev", "--", "--port", "5180", "--strictPort"],
+      "port": 5180
+    }
+  ]
+}
