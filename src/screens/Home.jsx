@@ -1,10 +1,8 @@
 // ============================================================
 // Home.jsx — ホーム。学習サイクルだけを主役にしたスッキリ構成。
-//   ・右上に学年セレクタ（中1/中2/中3）＝ヘッダー内。
+//   ・最上部に「遊び方」、その下に学年えらび（中1/中2/中3の大きな3列ボタン）。
 //   ・「学習サイクル」CTA → 単元ごとのサイクル（講義→ためす→なおす→応用）。
-//   ・その下に「きろく」（理解度マップ＋ダッシュボード）。
-//   ・はいち/れんしゅう/バトル/学び直し/応用モード、ごほうび、タブ（冒険/ご褒美/設定）は動線オフ
-//     （画面は残すが、すべて学習サイクルから入る。少しずつ付け足していく方針）。
+//   ・他モード/ごほうび/タブは動線オフ（画面は残すが、すべて学習サイクルから入る）。
 // ============================================================
 import { useState } from "react";
 import Header from "../components/Header.jsx";
@@ -12,6 +10,8 @@ import CharBubble, { voice } from "../components/CharBubble.jsx";
 import { MathBackdrop } from "../components/Decorations.jsx";
 import UnitCycle from "../components/UnitCycle.jsx";
 import { gradesWithChapters } from "../data/index.js";
+
+const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 中2=赤 中3=黄
 
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
@@ -26,8 +26,29 @@ export default function Home({
   return (
     <div className="app">
       <MathBackdrop />
-      <Header player={player} grade={grade} availGrades={availGrades} onSetGrade={onSetGrade} />
+      <Header player={player} />
       <div className="content" style={{ position: "relative", zIndex: 1 }}>
+        {/* 学年えらび（中1・中2・中3を3列・大きく・携帯でも押しやすく） */}
+        <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
+          {[1, 2, 3].map((g) => {
+            const ready = availGrades.includes(g);
+            const sel = (grade || 1) === g;
+            const c = GRADE_COLOR[g];
+            return (
+              <button key={g} data-sfx="none" disabled={!ready} onClick={() => ready && onSetGrade(g)} style={{
+                flex: 1, padding: "12px 4px", borderRadius: 13, cursor: ready ? "pointer" : "not-allowed", fontFamily: "inherit",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                border: sel ? `2.5px solid ${c}` : "1.5px solid rgba(255,255,255,.14)",
+                background: sel ? `${c}26` : "rgba(255,255,255,.05)",
+                color: ready ? (sel ? "#fff" : "rgba(255,255,255,.7)") : "rgba(255,255,255,.3)",
+              }}>
+                <span style={{ fontSize: 18, fontWeight: 900 }}>中{g}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.85 }}>{ready ? `中学${g}年` : "準備中"}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* 遊び方（いちばん上に常設） */}
         <div style={{ margin: "0 0 12px", padding: "11px 13px", borderRadius: 12, background: "rgba(56,189,248,.10)", border: "1px solid rgba(56,189,248,.32)" }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#7dd3fc", marginBottom: 4 }}>📖 遊び方</div>
