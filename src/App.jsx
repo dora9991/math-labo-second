@@ -471,7 +471,7 @@ export default function App() {
     });
     if (newlyCleared) {
       sfx.levelUp();
-      setTimeout(() => setCrystalGet({ amount: MASTER_CYCLE_CRYSTAL }), 400);
+      // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
     }
   }
@@ -870,11 +870,12 @@ export default function App() {
       studentId: data.player.studentId, mode: "battle",
       chapterId: battleMonster.chapterId ?? null, unitId: battleMonster.unitId ?? null,
       correct, wrong, // ★学習記録（日々の解答数・正解数）にバトルも反映
-      xp: gained,
+      xp: 0, // 経験値の概念は廃止（レベル＝サイクルクリア数）。報酬はお金で渡す。
       extra: { monsterId: battleMonster.id, result: win ? "win" : "lose", prestige: curPrestige },
     }));
     setData((d) => ({ ...d, records: store.load().records }));
-    if (win) addXp(gained);
+    // 経験値ではなくお金（コイン）を付与。addXp(0)は連続学習日数の更新だけ行う（XPは増えない）。
+    if (win) { updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + gained })); addXp(0); }
     // 敗北：HP1（Battle側で保存済み）でメニュー画面へ戻る
     if (!win) { setBattleMonster(null); setScreen("home"); return; }
     // 勝利：エサを使った敵なら「仲間チャレンジ」。条件(★全部)＆未所持なら確率で仲間に。
