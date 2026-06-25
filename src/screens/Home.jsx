@@ -10,8 +10,6 @@ import { useState } from "react";
 import Header from "../components/Header.jsx";
 import CharBubble, { voice } from "../components/CharBubble.jsx";
 import { MathBackdrop } from "../components/Decorations.jsx";
-import Dashboard from "../components/Dashboard.jsx";
-import UnderstandingMap from "../components/UnderstandingMap.jsx";
 import UnitCycle from "../components/UnitCycle.jsx";
 import { gradesWithChapters } from "../data/index.js";
 
@@ -71,11 +69,6 @@ export default function Home({
         {cycleOpen && (
           <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
         )}
-
-        {/* ===== きろく（学習サイクルの下に表示） ===== */}
-        <div style={{ fontSize: 11.5, fontWeight: 800, color: "rgba(255,255,255,.55)", margin: "16px 2px 8px" }}>📊 きろく（学習の記録）</div>
-        <UnderstandingMap player={player} grade={grade} onRelearn={onRelearn} />
-        <Dashboard player={player} records={records || []} onDetail={onDetail} grade={grade} />
       </div>
     </div>
   );
