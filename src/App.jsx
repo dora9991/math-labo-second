@@ -341,8 +341,7 @@ export default function App() {
     //  この回で間違いが出たら mistakeNow=true ＝「なおす」を要求（早すぎるクリアを防ぐ）。
     if (unit?.id && correct > 0) {
       const mistakeNow = mistakes.some((m) => m.unitId === unit.id);
-      if (level === "advanced" || level === "oni") bumpCycle(unit.id, { applied: correct, mistakeNow });
-      else bumpCycle(unit.id, { practice: correct, mistakeNow });
+      bumpCycle(unit.id, { practice: correct, mistakeNow });
     }
     // あんしんで★1が新たに付き、その単元のモンスターが解放されたら「新しい敵」を通知する
     if (anshin) {
@@ -413,14 +412,14 @@ export default function App() {
   //  レベル+1・クリスタル+1／剣石+鎧石 を付与する。recordStepAttempt と saveSlowResult から呼ぶ。
   //   ・practice … ためす（れんしゅう/バトル）の正解数 / relearn … なおすの正解数 / applied … 応用の正解数
   //   ・mistakeNow … その操作で今まさに間違いが生まれた場合 true（なおすを未達扱いにする）
-  function bumpCycle(unitId, { practice = 0, relearn = 0, applied = 0, mistakeNow = false } = {}) {
-    if (!unitId || (!practice && !relearn && !applied)) return;
+  function bumpCycle(unitId, { practice = 0, relearn = 0, mistakeNow = false } = {}) {
+    if (!unitId || (!practice && !relearn)) return;
     const prev = (data.player.cycle && data.player.cycle[unitId]) || {};
     const next = {
+      ...prev,
       practiceN: (prev.practiceN || 0) + practice,
       relearnN: (prev.relearnN || 0) + relearn,
-      appliedN: (prev.appliedN || 0) + applied,
-      lecture: !!prev.lecture, cleared: !!prev.cleared, appliedCredited: !!prev.appliedCredited,
+      lecture: !!prev.lecture, cleared: !!prev.cleared,
     };
     // 講義（確認問題）クリア：その単元の葉一レッスンの合格を見る（レッスンが無ければ自動OK）
     const lessonFound = findHaichiLessonForUnit(unitId);
@@ -431,9 +430,6 @@ export default function App() {
     const naosuOK = next.relearnN >= CYCLE_RELEARN_TARGET || !unitHasMistakes;
     const newlyCleared = !next.cleared && isUnitCycleCleared({ lectureOK, practiceN: next.practiceN, naosuOK });
     if (newlyCleared) next.cleared = true;
-    // 応用クリア（初回のみ石を付与）
-    const newlyApplied = !next.appliedCredited && next.appliedN >= 1;
-    if (newlyApplied) next.appliedCredited = true;
 
     const today = todayStr();
     const world = data.player.world || 1;
@@ -455,12 +451,6 @@ export default function App() {
         wc[world] = unitsW.filter((u) => cyc[u.id]?.cleared).length; // flagから数え直し（ドリフトしない）
         out.worldCleared = wc;
       }
-      if (newlyApplied) {
-        const gear = { swordStones: 0, armorStones: 0, ...(p.gear || {}) };
-        gear.swordStones = Math.min(GEAR_STONE_CAP, (gear.swordStones || 0) + 1);
-        gear.armorStones = Math.min(GEAR_STONE_CAP, (gear.armorStones || 0) + 1);
-        out.gear = gear;
-      }
       out.daily = daily;
       return out;
     });
@@ -468,9 +458,6 @@ export default function App() {
       sfx.levelUp();
       setTimeout(() => setCrystalGet({ amount: MASTER_CYCLE_CRYSTAL }), 400);
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
-    } else if (newlyApplied) {
-      sfx.levelUp();
-      setTimeout(() => setGearStoneGet({ sword: 1, armor: 1 }), 400);
     }
   }
 
@@ -478,7 +465,7 @@ export default function App() {
   //  - スキル習熟度(skillStats)を更新（mNew は画面側のEloで算出済み）
   //  - 間違いはスキル付きでノートへ
   //  - XPはささやか＆ペナルティなし（自己肯定を下げない）
-  function recordStepAttempt({ skill, unitId, level, templateId, ok, q, ans, mNew, relearn = false }) {
+  function recordStepAttempt({ skill, unitId, level, templateId, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
     const sid = data.player.studentId;
     // スキルタグがある中1のみ習熟度(Elo)を更新（中2・中3の固定問題は skill=null）
     // mNew は画面側Elo算出（StepUp/StepUpSimple）。バトル等で未指定なら、ここでElo更新する。
@@ -520,9 +507,10 @@ export default function App() {
     // 王道サイクルの進捗：unitごとに 講義・ためす・なおす・応用 を数える。
     //  ・サイクルクリア（講義+ためす+なおす）＝レベル+1・クリスタル+1（スキル1個ぶん）。
     //  ・応用クリア（初回）＝剣石+1・鎧石+1（武器/防具が少し育つ・上限あり）。
-    if (unitId && ok) {
+    //  ※確認問題（cycleSkip=true）は講義の確認なのでサイクル進捗を動かさない（合格→講義クリアは別途）。
+    //  ※応用（剣石/鎧石）は計算王の章クリアで付与するため、ここでは難易度から応用を推測しない。
+    if (unitId && ok && !cycleSkip) {
       if (relearn) bumpCycle(unitId, { relearn: 1 });
-      else if (level === "advanced" || level === "oni") bumpCycle(unitId, { applied: 1 });
       else bumpCycle(unitId, { practice: 1 });
     }
   }
@@ -641,6 +629,14 @@ export default function App() {
     addXp(xp);
     if (justCleared) {
       setTimeout(() => setCalcKingClear({ unitId }), 600); // 攻撃力アップのクリア演出
+      // 応用クリア（応用ボタン＝計算王の章を初クリア）＝剣石+1・鎧石+1（武器/防具が少し育つ・上限あり）
+      updatePlayer((p) => {
+        const gear = { swordStones: 0, armorStones: 0, ...(p.gear || {}) };
+        gear.swordStones = Math.min(GEAR_STONE_CAP, (gear.swordStones || 0) + 1);
+        gear.armorStones = Math.min(GEAR_STONE_CAP, (gear.armorStones || 0) + 1);
+        return { ...p, gear };
+      });
+      setTimeout(() => setGearStoneGet({ sword: 1, armor: 1 }), 1100);
     }
   }
 
@@ -1158,7 +1154,7 @@ export default function App() {
         player={data.player}
         grade={grade}
         onSetGrade={setWorld}
-        onAttempt={recordStepAttempt}
+        onAttempt={(a) => recordStepAttempt({ ...a, cycleSkip: true })}
         onWatched={markHaichiWatched}
         onPass={markHaichiPassed}
         onBack={() => setScreen("home")}
@@ -1200,9 +1196,9 @@ export default function App() {
           units={units}
           title={`確認問題：${L.t}`}
           roundSize={5}
-          passRate={80}
-          onAttempt={recordStepAttempt}
-          onRoundEnd={({ correct, seen }) => { if (seen > 0 && (correct / seen) * 100 >= 80) markHaichiPassed(key); }}
+          passRate={100}
+          onAttempt={(a) => recordStepAttempt({ ...a, cycleSkip: true })}
+          onRoundEnd={({ correct, seen }) => { if (seen > 0 && correct >= seen) markHaichiPassed(key); }}
           onHome={() => setScreen("haichiStudio")}
         />
       );

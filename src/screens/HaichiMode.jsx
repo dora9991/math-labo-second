@@ -19,7 +19,7 @@ import { findUnitById, gradesWithChapters } from "../data/index.js";
 
 const GRADE_LABEL = { 1: "中1", 2: "中2", 3: "中3" };
 const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" };
-const PASS_RATE = 80; // 練習の合格ライン（正答率%）
+const PASS_RATE = 100; // 確認問題の合格ライン（5問すべて正解で合格）
 
 // レッスンの識別キー（視聴・合格の記録に使う）
 const lessonKey = (grade, n) => `g${grade}m${n}`;

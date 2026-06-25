@@ -172,7 +172,7 @@ export default function Home({
               </span>
             </button>
             {cycleOpen && (
-              <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
+              <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
             )}
 
             {/* 王道サイクルの順に並べる：①講義 →②演習(れんしゅう/バトル) →③学び直し →④応用 */}

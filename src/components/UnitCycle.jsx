@@ -17,7 +17,9 @@ function lectureCleared(unitId, haichiPassed) {
   return !!haichiPassed[`g${found.grade}m${found.lesson.n}`];
 }
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, onHaichi, onPractice, onBattle, onRelearn, onChallenge }) {
+const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
+
+export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, onHaichi, onPractice, onBattle, onRelearn, onChallenge }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
@@ -60,7 +62,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           const lectureC = lectureCleared(u.id, haichiPassed);     // 講義＝確認問題に合格
           const tameC = (cyc.practiceN || 0) >= 1;                 // ためす＝れんしゅう/バトルで正解
           const naosuC = (cyc.relearnN || 0) >= 1;                 // なおす＝学び直しで正解
-          const ouyouC = (cyc.appliedN || 0) >= 1;                 // 応用＝応用問題で正解
+          const ouyouC = (calcKing[ch.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この章の計算王クリア
           const cleared = !!cyc.cleared;                          // 講義+ためす+なおす＝サイクルクリア（レベル+1済み）
           return (
           <div key={u.id} style={{
