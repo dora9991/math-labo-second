@@ -1069,12 +1069,13 @@ export default function App() {
   }
   function goBattleForUnit(unit) {
     const monster = unit && MONSTERS.find((m) => m.kind === "unit" && m.unitId === unit.id);
-    if (monster && isUnitMonsterUnlocked(data.player, monster)) {
+    if (monster) {
+      // 学習サイクルの「ためす→バトル」は、未解放でもその小単元の敵と直接たたかう（一覧へは飛ばさない）。
       setBattleMonster(monster);
       setBattlePractice(unit); // ★演習バトル：出題をこの単元の適応問題にし、習熟＋サイクルを更新
       setBattleKey((k) => k + 1);
     } else {
-      setBattleMonster(null); setBattlePractice(null); // 未解放／該当なし → 相手選択へ
+      setBattleMonster(null); setBattlePractice(null); // その単元に対応する敵がいない場合のみ相手選択へ
     }
     setScreen("battle");
   }

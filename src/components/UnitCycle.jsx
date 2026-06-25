@@ -66,7 +66,8 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           const lectureC = lectureCleared(u.id, haichiPassed);                         // 講義＝確認問題に合格
           const tamePct = Math.min(practiceN / CYCLE_PRACTICE_TARGET, 1);              // ためす＝15問でいっぱい
           const tameC = practiceN >= CYCLE_PRACTICE_TARGET;
-          const naosuDone = relearnN >= CYCLE_RELEARN_TARGET || !hasMistakes;          // なおす＝直し完了 or 間違いゼロ
+          // なおす＝「講義・ためすをクリアした上で」直し完了 or 間違いゼロ（先に進む前は未クリア扱い）
+          const naosuDone = lectureC && tameC && (relearnN >= CYCLE_RELEARN_TARGET || !hasMistakes);
           const naosuByZero = naosuDone && !hasMistakes && relearnN === 0;             // 間違いゼロで自動クリア（ほめる）
           const ouyouC = (calcKing[ch.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この章の計算王クリア
           const cleared = !!cyc.cleared;                                              // 講義+ためす+なおす＝サイクルクリア
@@ -106,7 +107,17 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               <div style={{ fontSize: 9.5, fontWeight: 800, color: "#86efac", margin: "-2px 0 6px" }}>💯 間違いゼロ！「なおす」は直すところなし</div>
             )}
 
-            {tame === u.id ? (
+            {!lectureC ? (
+              // ① まずは講義（動画＋確認問題）。確認問題ぜんぶ正解で「ためす」が出る。
+              <>
+                <div style={{ display: "flex" }}>
+                  {stepBtn(() => onHaichi?.(u), "📺 講義（動画＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)}
+                </div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
+                  確認問題ぜんぶ正解すると「✏️ ためす」が出るよ
+                </div>
+              </>
+            ) : tame === u.id ? (
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC)}
                 {stepBtn(() => onBattle?.(u), "⚔️ バトル", "linear-gradient(135deg,#ef4444,#b91c1c)")}
