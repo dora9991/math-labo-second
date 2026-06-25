@@ -146,18 +146,30 @@ export default function Home({
         {/* ===== ① ぼうけん（本線サイクル） ===== */}
         {tab === "adventure" && (
           <>
-            {/* 学習サイクル（押すと単元ごとのサイクルが開く＝§5） */}
+            {/* 学習サイクル（今回の目玉）＝押すと単元ごとのサイクルが開く。大きく光らせて最も目立たせる */}
             <button data-sfx="none" onClick={() => setCycleOpen((v) => !v)} style={{
-              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap",
-              margin: cycleOpen ? "0 0 10px" : "0 0 14px", padding: "10px 10px", borderRadius: 12, cursor: "pointer",
-              background: "rgba(99,102,241,.12)", border: "1px solid rgba(99,102,241,.35)", fontSize: 12, fontWeight: 800, color: "#c7d2fe",
+              position: "relative", overflow: "hidden",
+              width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+              margin: cycleOpen ? "2px 0 12px" : "4px 0 16px", padding: "16px 14px", borderRadius: 18, cursor: "pointer",
+              background: "linear-gradient(135deg,#6366f1,#8b5cf6,#a855f7)",
+              border: "2px solid rgba(255,255,255,.32)", color: "#fff",
+              boxShadow: "0 10px 30px rgba(99,102,241,.5)",
+              animation: cycleOpen ? "none" : "ctaPulse 2.2s ease-in-out infinite",
             }}>
-              <span>📚 学習サイクル</span><span style={{ opacity: .45 }}>｜</span>
-              <span>講義</span><span style={{ opacity: .55 }}>→</span>
-              <span>ためす</span><span style={{ opacity: .55 }}>→</span>
-              <span>なおす</span><span style={{ opacity: .55 }}>→</span>
-              <span style={{ opacity: .8 }}>（応用）</span>
-              <span style={{ marginLeft: 4, opacity: .85, fontWeight: 900 }}>{cycleOpen ? "▲ とじる" : "▼ 単元ごと"}</span>
+              {/* 光のスイープ（閉じている時だけ流す） */}
+              {!cycleOpen && <span style={{ position: "absolute", top: 0, bottom: 0, width: "45%", background: "linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent)", animation: "ctaShine 3.2s ease-in-out infinite", pointerEvents: "none" }} />}
+              <span style={{ display: "flex", alignItems: "center", gap: 9, position: "relative", zIndex: 1 }}>
+                <span style={{ fontSize: 27, lineHeight: 1 }}>📚</span>
+                <span style={{ fontSize: 19, fontWeight: 900, letterSpacing: 1 }}>学習サイクル</span>
+                <span style={{ fontSize: 10, fontWeight: 900, background: "#fde047", color: "#3a2a00", borderRadius: 999, padding: "2px 8px" }}>まずはここ！</span>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "center", fontSize: 12.5, fontWeight: 800, opacity: .96, position: "relative", zIndex: 1 }}>
+                <span>講義</span><span style={{ opacity: .6 }}>→</span>
+                <span>ためす</span><span style={{ opacity: .6 }}>→</span>
+                <span>なおす</span><span style={{ opacity: .6 }}>→</span>
+                <span style={{ opacity: .85 }}>（応用）</span>
+                <span style={{ marginLeft: 4, fontWeight: 900 }}>{cycleOpen ? "▲ とじる" : "▼ ひらく"}</span>
+              </span>
             </button>
             {cycleOpen && (
               <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />

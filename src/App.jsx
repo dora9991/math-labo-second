@@ -1167,6 +1167,7 @@ export default function App() {
   }
 
   // 他モードから開いた動画スタジオ（動画＋ワークシート＋手書き）。閉じたら呼び出し元へ戻る。
+  //  はいちモードと同じく onPractice/onPass を配線し、下に「確認問題」ボタン→練習→合格判定を出す。
   if (screen === "haichiStudio" && haichiStudio) {
     return (
       <HaichiStudio
@@ -1178,9 +1179,34 @@ export default function App() {
         passedMap={data.player.haichiPassed || {}}
         onChangeLesson={(L) => setHaichiStudio((s) => ({ ...s, lesson: L }))}
         onWatched={(key) => markHaichiWatched(key)}
+        onPractice={(L) => { setHaichiStudio((s) => ({ ...s, lesson: L })); setScreen("haichiStudioPractice"); }}
+        onPass={markHaichiPassed}
         onBack={() => setScreen(haichiStudio.ret || "home")}
       />
     );
+  }
+
+  // 講義（確認問題）：その動画にリンクした単元から5問出題し、80%で合格＝markHaichiPassed。
+  //  合格すると一覧の講義ボタンに「✓クリア」が点き、ためす・なおすが済んでいればサイクルクリアになる。
+  if (screen === "haichiStudioPractice" && haichiStudio?.lesson) {
+    const g = haichiStudio.grade, L = haichiStudio.lesson;
+    const key = `g${g}m${L.n}`;
+    const units = (L.u || []).map(findUnitById).filter(Boolean);
+    if (units.length > 0) {
+      return (
+        <StepUpSimple
+          key={"haichi-" + key}
+          player={data.player}
+          units={units}
+          title={`確認問題：${L.t}`}
+          roundSize={5}
+          passRate={80}
+          onAttempt={recordStepAttempt}
+          onRoundEnd={({ correct, seen }) => { if (seen > 0 && (correct / seen) * 100 >= 80) markHaichiPassed(key); }}
+          onHome={() => setScreen("haichiStudio")}
+        />
+      );
+    }
   }
 
   if (screen === "lesson" && lessonUnit) {
