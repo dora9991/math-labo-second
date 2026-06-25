@@ -49,6 +49,8 @@ function playBlip(c, freqs, { dur = 0.08, type = "square", vol = 0.16, gap = 0 }
 
 // カーソル移動：短いコツッ
 export const move = () => blip([520], { dur: 0.035, vol: 0.13 });
+// ボタン押下：ピコッ（短い2音上昇・軽め）。全ボタン共通のタップ音。
+export const tap = () => blip([880, 1245], { dur: 0.04, vol: 0.16 });
 // 決定：ピッ↑（2音上昇）
 export const confirm = () => blip([660, 990], { dur: 0.06, vol: 0.24 });
 // 戻る：ポッ↓（2音下降）

@@ -12,6 +12,7 @@ import { heroImageFor } from "../data/heroes.js";
 import { pickHitCheer, pickHurtCheer } from "../data/cheers.js";
 import { BigWord, StarField } from "../components/Decorations.jsx";
 import MathText from "../components/MathText.jsx";
+import DrawPad from "../components/DrawPad.jsx";
 import * as bgm from "../audio/bgm.js";
 import * as sfx from "../audio/sfx.js";
 import { getPlayerBattleStats, calcDamage, genBattleProblem, getEquippedSkills, SP_MAX, ultimateDamage, enemyDecide, battleBonuses } from "../engine/battle.js";
@@ -64,6 +65,7 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
   const equipped = getEquippedSkills(player); // 装備中スキル（スロット1/2）
   const [phase, setPhase] = useState("intro"); // intro | fight | win | lose
   const [input, setInput] = useState("");      // 文字入力の答え（数値問題＝中1用）
+  const [showPad, setShowPad] = useState(false); // ✏️ 手書き計算スペースの開閉
   // 式の4択（中2・中3）はシャッフルした選択肢を問題ごとに1回だけ作る
   const choices = useMemo(() => (q && hasChoices(q) ? shuffle([...q.choices]) : null), [q]);
   const [locked, setLocked] = useState(false);
@@ -1048,6 +1050,12 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
             </>
           ) : <div style={{ color: "#cceebb" }}>問題を準備中…</div>}
         </div>
+
+        {/* ✏️ 手書き計算スペース（バトル中もメモ書きできる・既定は閉じる） */}
+        <button onClick={() => setShowPad((v) => !v)} data-sfx="none" style={{ width: "100%", margin: "8px 0 0", padding: "9px", borderRadius: 11, border: "1px solid rgba(255,255,255,.18)", cursor: "pointer", fontSize: 13, fontWeight: 800, color: "#fff", background: showPad ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.06)" }}>
+          ✏️ 計算スペース{showPad ? "を閉じる" : "を開く"}
+        </button>
+        {showPad && <DrawPad key={q ? q.q : "pad"} height={300} />}
 
         {/* スキル（SP） */}
         <div className="bt-skill-bar">

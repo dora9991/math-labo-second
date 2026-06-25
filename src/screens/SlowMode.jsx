@@ -16,6 +16,7 @@ import CharBubble, { voice } from "../components/CharBubble.jsx";
 import { BigWord } from "../components/Decorations.jsx";
 import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
+import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, makeChoices } from "../engine/generator.js";
 import { isCorrect, SLOW_TARGET, slowXp, xpRepeatMultiplier } from "../engine/scoring.js";
@@ -46,6 +47,7 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
   const [shakeAns, setShakeAns] = useState(false);
   const [phase, setPhase] = useState("intro"); // intro | playing | clear
   const [clearInfo, setClearInfo] = useState(null); // {xp, baseXp, mult}
+  const [showPad, setShowPad] = useState(false); // ✏️ 手書き計算スペースの開閉
   const wrongsRef = useRef([]); // この回の誤答 {q,ans,unitId,level,ok:false}（学び直しへ送る）
 
   // あんしんモードでは「できた！の階段」＝正解の累計。それ以外は連続正解。
@@ -245,6 +247,12 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
             </div>
           </div>
         </div>
+
+        {/* ✏️ 手書き計算スペース（れんしゅう中もメモ書きできる） */}
+        <button onClick={() => setShowPad((v) => !v)} data-sfx="none" style={{ width: "100%", marginTop: 12, padding: "11px", borderRadius: 12, border: "1px solid rgba(255,255,255,.18)", cursor: "pointer", fontSize: 14, fontWeight: 800, color: "#fff", background: showPad ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.06)" }}>
+          ✏️ 計算スペース{showPad ? "を閉じる" : "を開く"}
+        </button>
+        {showPad && <DrawPad key={total} height={360} />}
       </div>
     </div>
   );

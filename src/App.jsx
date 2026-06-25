@@ -999,9 +999,10 @@ export default function App() {
   useEffect(() => {
     const click = (e) => {
       const b = e.target.closest("button");
-      if (!b || b.dataset.sfx === "none") return;
+      if (!b) return;
+      // 戻る系は戻る音、それ以外は全ボタンで「ピコッ」（data-sfx="none" でも鳴らす）
       if (b.classList.contains("back-btn") || b.dataset.sfx === "back") sfx.back();
-      else sfx.confirm();
+      else sfx.tap();
     };
     document.addEventListener("click", click);
     return () => document.removeEventListener("click", click);
@@ -1508,7 +1509,11 @@ export default function App() {
         onHpChange={(hp) => updatePlayer((p) => ({ ...p, currentHp: hp }))}
         onWinBonus={applyWinBonus}
         onMistake={recordWrongAnswer}
-        onExit={() => setBattleMonster(null)}
+        onExit={() => {
+          // 学習サイクルの「ためす→バトル」(battlePractice)から来た時は敵一覧に戻さずメニューへ。
+          if (battlePractice) { setBattlePractice(null); setBattleMonster(null); setScreen("home"); }
+          else setBattleMonster(null);
+        }}
       />
     );
   }

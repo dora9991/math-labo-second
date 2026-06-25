@@ -28,6 +28,14 @@ export default function Home({
       <MathBackdrop />
       <Header player={player} grade={grade} availGrades={availGrades} onSetGrade={onSetGrade} />
       <div className="content" style={{ position: "relative", zIndex: 1 }}>
+        {/* 遊び方（いちばん上に常設） */}
+        <div style={{ margin: "0 0 12px", padding: "11px 13px", borderRadius: 12, background: "rgba(56,189,248,.10)", border: "1px solid rgba(56,189,248,.32)" }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: "#7dd3fc", marginBottom: 4 }}>📖 遊び方</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,.82)", lineHeight: 1.6 }}>
+            下の<b style={{ color: "#c4b5fd" }}>「学習サイクル」</b>から単元をえらんで、<b>①講義</b>（動画＋確認問題）→ <b>②ためす</b>（れんしゅう/バトル）→ <b>③なおす</b>（まちがい直し）→ <b>④応用</b> の順に進もう。サイクルをクリアすると<b style={{ color: "#fde047" }}>レベルアップ</b>！
+          </div>
+        </div>
+
         {/* あいさつ吹き出し（アバターを押すとキャラ設定へ） */}
         <CharBubble text={greeting} avatar={player.avatar} onAvatar={onCharacter} />
 
