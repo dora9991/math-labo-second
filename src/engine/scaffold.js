@@ -8,7 +8,8 @@
 //  設計: 10_Projects/math-labo/設計_すでに躓いている子への足場_2026-06-28.md
 // ============================================================
 import { SKILLS } from "../data/skills.js";
-import { chaptersForGrade } from "../data/index.js";
+import { chaptersForGrade, findChapterByUnitId } from "../data/index.js";
+import { elemPoolForChapter } from "../data/elementaryBank.js";
 import { THETA, INITIAL_MASTERY } from "./mastery.js";
 
 const LEVELS = ["easy", "standard", "advanced"];
@@ -38,6 +39,21 @@ function skillsOfUnit(unit) {
 
 // 練習できる(=どこかの単元の問題に出る)スキルか
 function practiceable(s) { return !!(_idx[s] && _idx[s].length); }
+
+// 章の小学リメディ問題を、StepUpSimple が食べられる「合成ユニット」にする（B-2）。
+//  小学の各問題は静的({q, answerNumeric})なので build() でそのまま返す。
+//  StepUpSimple は easy/standard/advanced のどれかをランダムに引くので、全レベルに同じプールを入れて空を防ぐ。
+function elemUnitForUnit(unit) {
+  const ch = findChapterByUnitId(unit.id);
+  if (!ch) return null;
+  const pool = elemPoolForChapter(ch.id);
+  if (!pool.length) return null;
+  const tmpl = pool.map((p) => ({
+    id: p.id, skill: null,
+    build: () => ({ q: p.q, ans: p.answerNumeric != null ? p.answerNumeric : p.answer, h1: "", h2: "" }),
+  }));
+  return { id: "elem-" + ch.id, name: "小学のふくしゅう", emoji: "🧮", problems: { easy: tmpl, standard: tmpl, advanced: tmpl } };
+}
 
 // スキル s を「練習できるスキル」に翻訳：
 //  そのまま練習できればそれ／概念なら、それを直接 prereq に持つ練習可能スキルへ展開。
@@ -73,9 +89,14 @@ export function findScaffold(unit, skillStats = {}) {
     if (m >= THETA) continue; // すでに習得済みは出さない
     cands.push({ q, m, diff: SKILLS[q]?.difficulty ?? 3, home: earlier[0] });
   }
-  if (!cands.length) return null;
-  // 習熟が低い → 難易度が低い（より土台）順
-  cands.sort((a, b) => a.m - b.m || a.diff - b.diff);
-  const best = cands[0];
-  return { skillId: best.q, skillName: SKILLS[best.q]?.name || best.q, unit: best.home, fromUnitId: unit.id };
+  if (cands.length) {
+    // 習熟が低い → 難易度が低い（より土台）順
+    cands.sort((a, b) => a.m - b.m || a.diff - b.diff);
+    const best = cands[0];
+    return { kind: "unit", skillId: best.q, skillName: SKILLS[best.q]?.name || best.q, unit: best.home, fromUnitId: unit.id };
+  }
+  // B-2：中1の前提が無い（＝最も土台の単元）なら、小学の復習へ降りる
+  const elem = elemUnitForUnit(unit);
+  if (elem) return { kind: "elem", skillId: elem.id, skillName: "小学のふくしゅう", unit: elem, fromUnitId: unit.id };
+  return null;
 }
