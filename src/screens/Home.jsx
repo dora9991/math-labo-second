@@ -15,7 +15,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
-  onChallenge, onRelearn, onUnitHaichi, onUnitPractice, onUnitBattle,
+  onChallenge, onRelearn, onUnitHaichi, onUnitPractice, onUnitBattle, onDiagnose,
   onDetail, onCharacter,
 }) {
   const availGrades = gradesWithChapters();
@@ -96,7 +96,7 @@ export default function Home({
           </span>
         </button>
         {cycleOpen && (
-          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} />
+          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
         )}
       </div>
     </div>

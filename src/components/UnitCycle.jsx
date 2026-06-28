@@ -20,7 +20,7 @@ function lectureCleared(unitId, haichiPassed) {
 
 const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onPractice, onBattle, onRelearn, onChallenge }) {
+export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
@@ -55,6 +55,15 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           }}>{c.emoji} {c.name}</button>
         ))}
       </div>
+
+      {/* どこから始める？診断（B-3）：迷ったら章を軽くチェック */}
+      {onDiagnose && (
+        <button data-sfx="none" onClick={() => onDiagnose(ch)} style={{
+          width: "100%", marginBottom: 10, padding: "9px 10px", borderRadius: 10, cursor: "pointer",
+          border: "1px solid rgba(56,189,248,.45)", background: "rgba(56,189,248,.10)", color: "#7dd3fc",
+          fontSize: 12, fontWeight: 800, lineHeight: 1.4,
+        }}>🩺 どこから始める？（{ch.name}を軽くチェック）</button>
+      )}
 
       {/* 小単元ごとの行 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

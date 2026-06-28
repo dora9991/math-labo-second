@@ -64,6 +64,7 @@ import { challengeXp } from "./data/challenge.js";
 import { CHAPTERS, LEVEL_KEYS, chaptersForGrade, allChapters, findChapterByUnitId, findUnitById, findChapterById } from "./data/index.js";
 import { getWeakUnits, buildWeakUnit } from "./engine/weakness.js";
 import { findScaffold } from "./engine/scaffold.js";
+import Diagnose from "./screens/Diagnose.jsx";
 import { rollGacha, findGear, defaultGacha, GACHA_COST, GEAR_STONE_CAP } from "./engine/gear.js";
 
 const todayStr = () => new Date().toLocaleDateString("ja-JP");
@@ -99,6 +100,7 @@ export default function App() {
   const [battleMonster, setBattleMonster] = useState(null); // 選択中のモンスター
   const [battlePractice, setBattlePractice] = useState(null); // 演習バトル中の単元（null=通常のモンスターバトル）
   const [scaffold, setScaffold] = useState(null); // 足場（前提もどり）{ skillId, skillName, unit, returnTo }
+  const [diagnoseChapter, setDiagnoseChapter] = useState(null); // B-3「どこから始める？」診断中の章
   const skillStatsRef = useRef(data.player.skillStats || {}); // 演習バトルの適応出題が最新の習熟度を読むため
   useEffect(() => { skillStatsRef.current = data.player.skillStats || {}; }, [data.player.skillStats]);
   const [battleKey, setBattleKey] = useState(0); // 「もう一度」で戦闘をやり直す用
@@ -476,6 +478,20 @@ export default function App() {
       // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
     }
+  }
+
+  // B-3 診断「どこから始める？」の結果を skillStats にラチェット反映（正解スキルだけ上げる・下げない）。
+  function applyDiagnosis(results = []) {
+    updatePlayer((p) => {
+      const ss = { ...(p.skillStats || {}) };
+      for (const r of results) {
+        if (r.ok && r.skill) {
+          const prev = ss[r.skill] || { m: 0.5, n: 0 };
+          ss[r.skill] = { m: Math.max(prev.m ?? 0.5, 0.8), n: (prev.n || 0) + 1, last: todayStr() };
+        }
+      }
+      return { ...p, skillStats: ss };
+    });
   }
 
   // ステップアップ（弱点克服）モード：1問ごとの結果を保存
@@ -1231,6 +1247,20 @@ export default function App() {
     }
   }
 
+  // B-3 診断「どこから始める？」：章ごとの軽いチェック→理解度マップ→おすすめスタート。
+  if (screen === "diagnose" && diagnoseChapter) {
+    return (
+      <Diagnose
+        key={"diag-" + diagnoseChapter.id}
+        player={data.player}
+        chapter={diagnoseChapter}
+        onApply={applyDiagnosis}
+        onStartUnit={(unit) => { setDiagnoseChapter(null); openHaichiStudio(unit, "home"); }}
+        onBack={() => { setDiagnoseChapter(null); setScreen("home"); }}
+      />
+    );
+  }
+
   // 足場（B-1）：躓きの前提スキルを練習する。時間無制限・3問・サイクルは動かさない(cycleSkip)。
   //  終わったら元の確認問題へ戻して、再挑戦できるようにする。
   if (screen === "scaffold" && scaffold?.unit) {
@@ -1590,6 +1620,7 @@ export default function App() {
       onDialogue={() => setScreen("dialogue")}
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}
+      onDiagnose={(ch) => { setDiagnoseChapter(ch); setScreen("diagnose"); }}
       onUnitPractice={(chapter, unit) => { setSel({ chapter, unit, level: "easy" }); setScreen("anshin"); }}
       onUnitBattle={(unit) => goBattleForUnit(unit)}
       onClinic={() => setScreen("clinic")}
