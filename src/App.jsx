@@ -63,6 +63,7 @@ import { isUnitMonsterUnlocked } from "./engine/unlock.js";
 import { challengeXp } from "./data/challenge.js";
 import { CHAPTERS, LEVEL_KEYS, chaptersForGrade, allChapters, findChapterByUnitId, findUnitById, findChapterById } from "./data/index.js";
 import { getWeakUnits, buildWeakUnit } from "./engine/weakness.js";
+import { findScaffold } from "./engine/scaffold.js";
 import { rollGacha, findGear, defaultGacha, GACHA_COST, GEAR_STONE_CAP } from "./engine/gear.js";
 
 const todayStr = () => new Date().toLocaleDateString("ja-JP");
@@ -97,6 +98,7 @@ export default function App() {
   const [sel, setSel] = useState({ chapter: null, unit: null, level: null });
   const [battleMonster, setBattleMonster] = useState(null); // 選択中のモンスター
   const [battlePractice, setBattlePractice] = useState(null); // 演習バトル中の単元（null=通常のモンスターバトル）
+  const [scaffold, setScaffold] = useState(null); // 足場（前提もどり）{ skillId, skillName, unit, returnTo }
   const skillStatsRef = useRef(data.player.skillStats || {}); // 演習バトルの適応出題が最新の習熟度を読むため
   useEffect(() => { skillStatsRef.current = data.player.skillStats || {}; }, [data.player.skillStats]);
   const [battleKey, setBattleKey] = useState(0); // 「もう一度」で戦闘をやり直す用
@@ -1207,6 +1209,8 @@ export default function App() {
     const key = `g${g}m${L.n}`;
     const units = (L.u || []).map(findUnitById).filter(Boolean);
     if (units.length > 0) {
+      // 足場（B-1）：確認に落ちた時、その単元の最弱前提を1つ提案する（無ければnull）
+      const sc = findScaffold(units[0], data.player.skillStats || {});
       return (
         <StepUpSimple
           key={"haichi-" + key}
@@ -1214,13 +1218,33 @@ export default function App() {
           units={units}
           title={`確認問題：${L.t}`}
           roundSize={5}
-          passRate={100}
+          passRate={80}
           onAttempt={(a) => recordStepAttempt({ ...a, cycleSkip: true })}
-          onRoundEnd={({ correct, seen }) => { if (seen > 0 && correct >= seen) markHaichiPassed(key); }}
+          onRoundEnd={({ correct, seen }) => { if (seen > 0 && correct / seen >= 0.8) markHaichiPassed(key); }}
           onHome={() => setScreen("haichiStudio")}
+          failAction={sc ? {
+            label: `🔍 ここが土台かも：「${sc.skillName}」を3問`,
+            onClick: () => { setScaffold({ ...sc, returnTo: "haichiStudioPractice" }); setScreen("scaffold"); },
+          } : null}
         />
       );
     }
+  }
+
+  // 足場（B-1）：躓きの前提スキルを練習する。時間無制限・3問・サイクルは動かさない(cycleSkip)。
+  //  終わったら元の確認問題へ戻して、再挑戦できるようにする。
+  if (screen === "scaffold" && scaffold?.unit) {
+    return (
+      <StepUpSimple
+        key={"scaffold-" + scaffold.skillId}
+        player={data.player}
+        units={[scaffold.unit]}
+        title={`土台：${scaffold.skillName}`}
+        roundSize={3}
+        onAttempt={(a) => recordStepAttempt({ ...a, cycleSkip: true })}
+        onHome={() => setScreen(scaffold.returnTo || "haichiStudio")}
+      />
+    );
   }
 
   if (screen === "lesson" && lessonUnit) {

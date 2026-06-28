@@ -27,7 +27,7 @@ const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
 const choicesFor = (q) => hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans);
 const ansEq = (val, q) => hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans);
 
-export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList }) {
+export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList, failAction = null }) {
   const ROUND = roundSize > 0 ? roundSize : ROUND_SIZE;
   const recentRef = useRef([]);
   const advanceTimer = useRef(null);
@@ -176,9 +176,17 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
             />
           )}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          {/* 足場（B-1）：不合格のとき、土台の前提へ戻る提案を出す */}
+          {failAction && passRate != null && rate < passRate && (
+            <button onClick={failAction.onClick} data-sfx="none" style={{ width: "100%", marginTop: 12, padding: "13px", borderRadius: 12, cursor: "pointer",
+              border: "2px solid #fbbf24", background: "rgba(251,191,36,.15)", color: "#fde047", fontWeight: 900, fontSize: 14, lineHeight: 1.45 }}>
+              {failAction.label}<br /><span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>ここを直すと一気に伸びるよ！</span>
+            </button>
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             <button onClick={onHome} data-sfx="back" style={{ flex: 1, padding: "14px", borderRadius: 12, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.06)", color: "#fff", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>やめる</button>
-            <button onClick={startRound} data-sfx="none" style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", background: "#6366f1", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 15 }}>続ける →</button>
+            <button onClick={startRound} data-sfx="none" style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", background: "#6366f1", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 15 }}>{passRate != null ? "もう一度" : "続ける →"}</button>
           </div>
         </div>
       </div>
