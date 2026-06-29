@@ -19,10 +19,11 @@ import QuestionText from "../components/QuestionText.jsx";
 import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, makeChoices } from "../engine/generator.js";
-import { isCorrect, SLOW_TARGET, slowXp, xpRepeatMultiplier } from "../engine/scoring.js";
+import { isCorrect, SLOW_TARGET, slowXp, xpRepeatMultiplier, CYCLE_PRACTICE_TARGET } from "../engine/scoring.js";
 
 const todayStr = () => new Date().toLocaleDateString("ja-JP");
-const ANSHIN_TARGET = 10; // れんしゅう（あんしん）の目標＝10問正解でクリア（2026-06-24 5→10に調整）
+// れんしゅう（あんしん）の目標＝サイクルの「ためす」達成数に揃える（1ラウンド完走＝ためす完了で混乱を無くす）
+const ANSHIN_TARGET = CYCLE_PRACTICE_TARGET;
 
 // 4択ヘルパー（タイムアタックと同じ。式の4択＝文字列厳密一致／数値＝makeChoices＋数値照合）
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
