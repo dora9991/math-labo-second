@@ -27,7 +27,7 @@ const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
 const choicesFor = (q) => hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans);
 const ansEq = (val, q) => hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans);
 
-export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList, failAction = null }) {
+export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList, failAction = null, passActions = null }) {
   const ROUND = roundSize > 0 ? roundSize : ROUND_SIZE;
   const recentRef = useRef([]);
   const advanceTimer = useRef(null);
@@ -134,7 +134,17 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
                 {rate >= passRate ? (
                   <div style={{ padding: "12px 14px", borderRadius: 12, background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff" }}>
                     <div style={{ fontSize: 22, fontWeight: 900 }}>🏅 合格！</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%でクリア！バッチリだね</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%でクリア！つぎは「ためす」だよ</div>
+                    {passActions && passActions.length > 0 && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        {passActions.map((a, i) => (
+                          <button key={i} data-sfx="none" onClick={a.onClick} style={{
+                            flex: 1, padding: "12px 8px", borderRadius: 11, border: "2px solid rgba(255,255,255,.5)", cursor: "pointer",
+                            background: "rgba(255,255,255,.16)", color: "#fff", fontWeight: 900, fontSize: 13.5, lineHeight: 1.3,
+                          }}>{a.label}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(251,146,60,.18)", border: "1px solid rgba(251,146,60,.5)", color: "#fdba74" }}>

@@ -335,9 +335,11 @@ export default function App() {
       }
       return next;
     });
-    // 間違いを学び直しノートへ（あんしん／じっくり両方。直近3問まで＝タイムアタックと同じ扱い）
-    const mistakes = (results || []).filter((r) => !r.ok).slice(0, 3).map((r) =>
-      makeMistake({ studentId: sid, chapterId: chapter.id, unitId: r.unitId || unit.id, level: r.level || level, q: r.q, ans: r.ans })
+    // 間違いを学び直しノートへ。入りすぎ防止＝「同じ小単元で2回以上まちがえた」単元だけ、代表1件。
+    const wrongByUnit = {};
+    for (const r of (results || [])) { const uid = r.unitId || unit.id; (wrongByUnit[uid] = wrongByUnit[uid] || []).push(r); }
+    const mistakes = Object.values(wrongByUnit).filter((arr) => arr.length >= 2).map((arr) =>
+      makeMistake({ studentId: sid, chapterId: chapter.id, unitId: arr[0].unitId || unit.id, level: arr[0].level || level, q: arr[0].q, ans: arr[0].ans })
     );
     const newMistakes = store.addMistakes(mistakes);
     setData((d) => ({ ...d, records: store.load().records, mistakes: newMistakes }));
@@ -524,9 +526,19 @@ export default function App() {
     });
   }
 
+  // 同じ小単元で「2回連続まちがえた」時だけ学び直しに追加する（学び直しに入りすぎないように）。
+  const wrongStreakRef = useRef({}); // { [unitId]: 連続まちがい数 }（正解でリセット）
+  function streakMistake(unitId, ok, makeIt) {
+    if (!unitId) return null;                  // 単元不明は追加しない（ノイズ減）
+    const s = wrongStreakRef.current;
+    if (ok) { s[unitId] = 0; return null; }    // 正解 → 連続リセット
+    s[unitId] = (s[unitId] || 0) + 1;
+    return s[unitId] === 2 ? makeIt() : null;  // ちょうど2連続になった時だけ追加
+  }
+
   // ステップアップ（弱点克服）モード：1問ごとの結果を保存
   //  - スキル習熟度(skillStats)を更新（mNew は画面側のEloで算出済み）
-  //  - 間違いはスキル付きでノートへ
+  //  - 間違いは「同じ小単元で2連続」の時だけノートへ
   //  - XPはささやか＆ペナルティなし（自己肯定を下げない）
   function recordStepAttempt({ skill, unitId, level, templateId, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
     const sid = data.player.studentId;
@@ -546,11 +558,12 @@ export default function App() {
     }
     // 小単元の習得確認も更新（1問ずつ）
     bumpUnitMastery(unitId, [!!ok]);
-    if (!ok) {
-      const newMistakes = store.addMistakes([
-        makeMistake({ studentId: sid, chapterId: skill ? "c1" : null, unitId, level, q, ans, skill, templateId }),
-      ]);
-      setData((d) => ({ ...d, mistakes: newMistakes }));
+    // 学び直しへの追加は「同じ小単元で2回連続まちがえた時だけ」（入りすぎ防止）。
+    //  学び直し中(relearn)は新たな間違いを足さない（直している最中なので）。
+    if (!relearn) {
+      const m = streakMistake(unitId, ok, () =>
+        makeMistake({ studentId: sid, chapterId: skill ? "c1" : null, unitId, level, q, ans, skill, templateId }));
+      if (m) { const newMistakes = store.addMistakes([m]); setData((d) => ({ ...d, mistakes: newMistakes })); }
     }
     // 学び直しは「学習のコア」：XP1.5倍（1問15）＋少額コイン。
     //  ※クリスタルは「サイクルクリア（1単元）＝1個」だけに一本化（ドリップ廃止）。
@@ -1257,6 +1270,9 @@ export default function App() {
     if (units.length > 0) {
       // 足場（B-1）：確認に落ちた時、その単元の最弱前提を1つ提案する（無ければnull）
       const sc = findScaffold(units[0], data.player.skillStats || {});
+      // 合格後は「ためす」へ直行できる（れんしゅう or バトルを選ぶ）
+      const passUnit = units[0];
+      const passChapter = findChapterByUnitId(passUnit.id);
       return (
         <StepUpSimple
           key={"haichi-" + key}
@@ -1272,6 +1288,10 @@ export default function App() {
             label: `🔍 ここが土台かも：「${sc.skillName}」を3問`,
             onClick: () => { setScaffold({ ...sc, returnTo: "haichiStudioPractice" }); setScreen("scaffold"); },
           } : null}
+          passActions={[
+            { label: "✏️ れんしゅう", onClick: () => { setSel({ chapter: passChapter, unit: passUnit, level: "easy" }); setScreen("anshin"); } },
+            { label: "⚔️ バトル", onClick: () => goBattleForUnit(passUnit) },
+          ]}
         />
       );
     }
@@ -1429,10 +1449,10 @@ export default function App() {
         player={data.player}
         units={[practiceUnit]}
         title={`学び直し：${practiceUnit.name}`}
-        roundSize={7}
+        roundSize={5}
         passRate={100}
         onAttempt={(a) => recordStepAttempt({ ...a, relearn: true })}
-        onRoundEnd={({ correct, seen }) => { if (seen >= 7 && correct >= seen) masterRelearnUnit(practiceUnit); }}
+        onRoundEnd={({ correct, seen }) => { if (seen >= 5 && correct >= seen) masterRelearnUnit(practiceUnit); }}
         onHome={() => setScreen("relearn")}
       />
     );
@@ -1831,7 +1851,7 @@ function RelearnMasteredOverlay({ info, onDone }) {
         <div style={{ fontSize: 50, margin: "10px 0" }}>📖✨</div>
         <div style={{ fontSize: 18, fontWeight: 900, color: "#86efac" }}>{info.unitName}</div>
         <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", margin: "8px 0 4px", lineHeight: 1.5 }}>
-          7問ぜんぶ正解！この単元のまちがい{info.count}問をノートから消したよ。💰+{info.reward}
+          5問ぜんぶ正解！この単元のまちがい{info.count}問をノートから消したよ。💰+{info.reward}
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
       </div>

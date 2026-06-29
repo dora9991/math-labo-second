@@ -31,7 +31,7 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
       <Header player={player} back="ホーム" onBack={onBack} />
       <div className="content">
         <div className="pg-ttl">📖 学び直しモード</div>
-        <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。学び直しで<b style={{ color: "#86efac" }}>7問ぜんぶ正解</b>すると、その単元はノートから自動で消えるよ（1問 +15XP）。</div>
+        <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。学び直しで<b style={{ color: "#86efac" }}>5問ぜんぶ正解</b>すると、その単元はノートから自動で消えるよ（1問 +15XP）。</div>
 
         {mistakes.length === 0 ? (
           <div className="glass">
@@ -69,7 +69,7 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
                     <button data-sfx="none" onClick={() => onRelearn(unit)}
                       style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: "none", cursor: "pointer",
                         fontSize: 13, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", lineHeight: 1.3 }}>
-                      ✏️ この単元を学び直す<br /><span style={{ fontSize: 10, fontWeight: 700, opacity: .85 }}>7問ぜんぶ正解で消える</span>
+                      ✏️ この単元を学び直す<br /><span style={{ fontSize: 10, fontWeight: 700, opacity: .85 }}>5問ぜんぶ正解で消える</span>
                     </button>
                   )}
                   {unit && onHaichi && hasHaichiLessonForUnit(key) ? (
