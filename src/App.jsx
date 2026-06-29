@@ -447,8 +447,9 @@ export default function App() {
     // なおすクリア：学び直しで正解、または直すべき間違いがそもそも無い（詰まり防止）
     const unitHasMistakes = mistakeNow || (data.mistakes || []).some((m) => m.unitId === unitId);
     const naosuOK = next.relearnN >= CYCLE_RELEARN_TARGET || !unitHasMistakes;
+    const wasCleared = !!next.cleared; // この呼び出し前から既にクリア済み（＝解き直し＝間隔反復の復習対象）
     const newlyCleared = !next.cleared && isUnitCycleCleared({ lectureOK, practiceN: next.practiceN, naosuOK });
-    if (newlyCleared) next.cleared = true;
+    if (newlyCleared) { next.cleared = true; next.clearedAt = Date.now(); } // 初クリア日時を記録（復習ボーナス判定に使う）
 
     const today = todayStr();
     const world = data.player.world || 1;
@@ -477,7 +478,36 @@ export default function App() {
       sfx.levelUp();
       // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
+    } else if (wasCleared) {
+      // 既にクリア済みの単元を解き直した＝間隔反復の復習。1日後/1週間後の窓が開いていれば石を出す。
+      maybeReviewBonus(unitId);
     }
+  }
+
+  // 間隔反復の復習ボーナス：クリア済みの単元を「1日後」「1週間後」に解き直したら 剣石+鎧石。各マイルストーン1回だけ。
+  function maybeReviewBonus(unitId) {
+    const cyc = (data.player.cycle && data.player.cycle[unitId]) || {};
+    if (!cyc.cleared || !cyc.clearedAt) return;
+    const days = (Date.now() - cyc.clearedAt) / 86400000;
+    const give = [];
+    if (days >= 1 && !cyc.r1) give.push("d1");   // 初クリアから1日以上たって解き直した
+    if (days >= 7 && !cyc.r7) give.push("d7");   // 初クリアから1週間以上たって解き直した
+    if (!give.length) return;
+    const add = give.length; // 1日と1週間が同時に開いていれば +2
+    updatePlayer((p) => {
+      const cy = { ...(p.cycle || {}) };
+      const u = { ...(cy[unitId] || {}) };
+      if (give.includes("d1")) u.r1 = true;
+      if (give.includes("d7")) u.r7 = true;
+      cy[unitId] = u;
+      const gear = { swordStones: 0, armorStones: 0, ...(p.gear || {}) };
+      gear.swordStones = Math.min(GEAR_STONE_CAP, (gear.swordStones || 0) + add);
+      gear.armorStones = Math.min(GEAR_STONE_CAP, (gear.armorStones || 0) + add);
+      return { ...p, cycle: cy, gear };
+    });
+    sfx.levelUp();
+    const reason = give.includes("d7") ? "1週間ぶりの復習" : "1日ぶりの復習";
+    setTimeout(() => setGearStoneGet({ sword: add, armor: add, reason }), 500);
   }
 
   // B-3 診断「どこから始める？」の結果を skillStats にラチェット反映（正解スキルだけ上げる・下げない）。
@@ -598,7 +628,7 @@ export default function App() {
       const daily = (p.daily && p.daily.date === today) ? { ...p.daily } : { date: today, cycles: 0 };
       for (const id of toClear) {
         if (cyc[id]?.cleared) continue;
-        cyc[id] = { ...(cyc[id] || {}), cleared: true };
+        cyc[id] = { ...(cyc[id] || {}), cleared: true, clearedAt: Date.now() };
         coins += MASTER_CYCLE_COIN; crystals += MASTER_CYCLE_CRYSTAL; daily.cycles = (daily.cycles || 0) + 1;
       }
       const wc = { 1: 0, 2: 0, 3: 0, ...(p.worldCleared || {}) };
@@ -1674,7 +1704,7 @@ export default function App() {
       )}
       {skillGet && <SkillGetOverlay skill={skillGet} onDone={() => setSkillGet(null)} />}
       {crystalGet && <CrystalGetOverlay amount={crystalGet.amount} onDone={() => setCrystalGet(null)} />}
-      {gearStoneGet && <GearStoneGetOverlay sword={gearStoneGet.sword} armor={gearStoneGet.armor} onDone={() => setGearStoneGet(null)} />}
+      {gearStoneGet && <GearStoneGetOverlay sword={gearStoneGet.sword} armor={gearStoneGet.armor} reason={gearStoneGet.reason} onDone={() => setGearStoneGet(null)} />}
       {relearnMastered && <RelearnMasteredOverlay info={relearnMastered} onDone={() => setRelearnMastered(null)} />}
       {recruitResult && <RecruitResultOverlay result={recruitResult} onDone={() => setRecruitResult(null)} />}
       {calcKingClear && (
@@ -1809,14 +1839,15 @@ function RelearnMasteredOverlay({ info, onDone }) {
   );
 }
 
-function GearStoneGetOverlay({ sword = 1, armor = 1, onDone }) {
+function GearStoneGetOverlay({ sword = 1, armor = 1, reason = null, onDone }) {
+  const review = !!reason; // 復習ボーナス（間隔反復）か、応用クリアか
   return (
     <div onClick={onDone} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div className="glass" style={{ maxWidth: 320, padding: "26px 24px", textAlign: "center", border: "2px solid #fbbf24", background: "#171536", animation: "rankUpPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: "#fbbf24", letterSpacing: 2 }}>⚒️ おうようクリア！ ⚒️</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#fbbf24", letterSpacing: 2 }}>{review ? `📅 ${reason}！` : "⚒️ おうようクリア！ ⚒️"}</div>
         <div style={{ fontSize: 50, margin: "10px 0" }}>🗡️🛡️</div>
         <div style={{ fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>剣石 +{sword} ・ 鎧石 +{armor}</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.65)", margin: "8px 0 4px", lineHeight: 1.5 }}>武器と防具が少しだけ強くなった！（応用をクリアするほど育つ）</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,.65)", margin: "8px 0 4px", lineHeight: 1.5 }}>{review ? "時間をあけて解き直すと、よく覚えられる＆装備も育つ！" : "武器と防具が少しだけ強くなった！（応用をクリアするほど育つ）"}</div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
       </div>
     </div>

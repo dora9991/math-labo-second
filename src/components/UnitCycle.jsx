@@ -81,6 +81,9 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           const naosuByZero = naosuDone && !hasMistakes && relearnN === 0;             // 間違いゼロで自動クリア（ほめる）
           const ouyouC = (calcKing[ch.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この章の計算王クリア
           const cleared = !!cyc.cleared;                                              // 講義+ためす+なおす＝サイクルクリア
+          // 間隔反復：クリア済みで「1日後/1週間後」の復習窓が開いていれば、解き直しで石がもらえる
+          const reviewDays = cleared && cyc.clearedAt ? (Date.now() - cyc.clearedAt) / 86400000 : 0;
+          const reviewReady = cleared && cyc.clearedAt && ((reviewDays >= 1 && !cyc.r1) || (reviewDays >= 7 && !cyc.r7));
           // 理解度メータ：講義25% / ためす50% / なおす12.5% / 応用12.5%（色は下のボタンと対応）
           const segs = [
             { w: 25,   fill: lectureC ? 1 : 0,  color: "#ef4444" },
@@ -103,6 +106,10 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               {cleared && !danger && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#fff", background: "#3b82f6", borderRadius: 999, padding: "2px 8px" }}>🎉 サイクルクリア</span>}
               {danger && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#3a2a00", background: "#fbbf24", borderRadius: 999, padding: "2px 8px" }}>⚠️ 危ないかも</span>}
             </div>
+
+            {reviewReady && (
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", margin: "-2px 0 6px" }}>📅 復習チャンス！もう一度ためすと 剣石・鎧石ゲット</div>
+            )}
 
             {/* 理解度メータ（講義→ためす→なおす→応用の重みづけ進捗） */}
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
