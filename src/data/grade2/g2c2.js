@@ -61,11 +61,15 @@ function genOni(r) {
   return { q: `連立方程式 ${eqStr(a1, b1, c1)}、${eqStr(a2, b2, c2)} を解きなさい。`, ans: pairStr(x0, y0), choices: pairChoices(x0, y0, r), h1: "係数をそろえて1文字を消す（大きい数に注意）", h2: "消去→1次方程式→代入の順で求める" };
 }
 
+// 各レベル10問に拡張：同じ生成器でも id を変えて10問ぶん並べる（毎回ランダム生成・解は構成法で必ず正答）
+const tens = (idp, suffix, fn, skill) =>
+  Array.from({ length: 10 }, (_, i) => p(idp + suffix + (i + 1), fn, skill));
+
 const lv = (fns, idp, skill) => ({
-  easy: [p(idp + "e", fns.e, skill)],
-  standard: [p(idp + "s", fns.s, skill)],
-  advanced: [p(idp + "a", fns.a, skill)],
-  oni: [p(idp + "o", genOni, skill)], // 🔥鬼（全単元共通：大係数の連立）
+  easy: tens(idp, "e", fns.e, skill),
+  standard: tens(idp, "s", fns.s, skill),
+  advanced: tens(idp, "a", fns.a, skill),
+  oni: tens(idp, "o", genOni, skill), // 🔥鬼（全単元共通：大係数の連立）
 });
 
 export const chapter = {

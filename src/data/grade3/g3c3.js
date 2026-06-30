@@ -91,11 +91,17 @@ function genOni(r) {
   return { q: `${eq} を解きなさい。`, ans, choices: exprChoices(ans, variants, fill, r), h1: "解の公式 x=(−b±√(b²−4ac))/(2a)。√と分数は最後まで約分する", h2: `a=${a}, b=${b}, c=${c} を公式に代入 → 約分` };
 }
 
+// 各レベル10問ずつ（id は e1..e10 / s1..s10 / a1..a10 / o1..o10）。
+//  生成関数は r（乱数シード）で振る舞いが変わるので、id を分けるだけで
+//  別々の問題になる。解は build 内で逆算しており必ず正答・書式も共通。
+const N = 10;
+const series = (idp, suf, mk, skill) =>
+  Array.from({ length: N }, (_, i) => p(idp + suf + (i + 1), mk, skill));
 const lv = (fn, idp, skill, extra) => ({
-  easy: [p(idp + "e", (r) => fn(r, "easy", extra), skill)],
-  standard: [p(idp + "s", (r) => fn(r, "standard", extra), skill)],
-  advanced: [p(idp + "a", (r) => fn(r, "advanced", extra), skill)],
-  oni: [p(idp + "o", (r) => genOni(r), skill)], // 🔥鬼（全単元共通：解の公式の難問）
+  easy: series(idp, "e", (r) => fn(r, "easy", extra), skill),
+  standard: series(idp, "s", (r) => fn(r, "standard", extra), skill),
+  advanced: series(idp, "a", (r) => fn(r, "advanced", extra), skill),
+  oni: series(idp, "o", (r) => genOni(r), skill), // 🔥鬼（全単元共通：解の公式の難問）
 });
 
 export const chapter = {

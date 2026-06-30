@@ -120,11 +120,16 @@ function genOniSqrt(r) {
   return { q, ans, choices: exprChoices(ans, variants, fill, r), h1: "分母と分子に √b をかけて分母を整数にする", h2: `${a}/√${b}=${a}√${b}/${b}=${k}√${b}` };
 }
 
+// 各レベル10問に拡張：同じ生成器でも id を変えて10問ぶん並べる
+// （毎回ランダム生成・答えは sqrtStr 等の構成法で必ず正しい書式になる）
+const tens = (idp, suffix, build, skill) =>
+  Array.from({ length: 10 }, (_, i) => p(idp + suffix + (i + 1), build, skill));
+
 const lv = (fn, idp, skill) => ({
-  easy: [p(idp + "e", (r) => fn(r, "easy"), skill)],
-  standard: [p(idp + "s", (r) => fn(r, "standard"), skill)],
-  advanced: [p(idp + "a", (r) => fn(r, "advanced"), skill)],
-  oni: [p(idp + "o", (r) => genOniSqrt(r), skill)], // 🔥鬼（全単元共通：有理化）
+  easy: tens(idp, "e", (r) => fn(r, "easy"), skill),
+  standard: tens(idp, "s", (r) => fn(r, "standard"), skill),
+  advanced: tens(idp, "a", (r) => fn(r, "advanced"), skill),
+  oni: tens(idp, "o", (r) => genOniSqrt(r), skill), // 🔥鬼（全単元共通：有理化）
 });
 
 export const chapter = {

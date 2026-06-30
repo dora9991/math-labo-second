@@ -31,8 +31,16 @@ function genCount(r, level) {
     const n = r(4, 6), rr = r(2, 3), a = nPr(n, rr);
     return { q: `${n}人から${rr}人を選んで1列に並べる並べ方は何通りですか。`, ans: a, choices: numChoices(a, r, [nCr(n, rr), Math.pow(n, rr), n * rr]), h1: H.count.h1, h2: "並べる=n×(n−1)×…（r個ぶん）" };
   }
-  const n = r(4, 7), rr = r(2, 3), a = nCr(n, rr);
-  return { q: `${n}人から${rr}人を選ぶ選び方は何通りですか。`, ans: a, choices: numChoices(a, r, [nPr(n, rr), n * rr, n]), h1: H.count.h1, h2: "選ぶ=並べる ÷ (r×…×1)" };
+  if (level === "advanced") {
+    const n = r(4, 7), rr = r(2, 3), a = nCr(n, rr);
+    return { q: `${n}人から${rr}人を選ぶ選び方は何通りですか。`, ans: a, choices: numChoices(a, r, [nPr(n, rr), n * rr, n]), h1: H.count.h1, h2: "選ぶ=並べる ÷ (r×…×1)" };
+  }
+  // oni：男女混在の並べ方（女子a人が両端、その内側に全員を並べる…を避け、ここは「両端が女子」型の数え）
+  // 男a人・女b人(合計n人)を1列に並べるとき、両端がともに女子になる並べ方は何通り？
+  const aMen = r(2, 3), bWomen = r(2, 3), n = aMen + bWomen;
+  // 両端の女子の並べ方 = bWomen×(bWomen−1)、残り(n−2)人の並べ方 = (n−2)!
+  const a = bWomen * (bWomen - 1) * fact(n - 2);
+  return { q: `男子 ${aMen} 人、女子 ${bWomen} 人の合計 ${n} 人を1列に並べるとき、両端がともに女子になる並べ方は何通りですか。`, ans: a, choices: numChoices(a, r, [fact(n), bWomen * fact(n - 2), aMen * (aMen - 1) * fact(n - 2)]), h1: H.count.h1, h2: `両端の女子=${bWomen}×${bWomen - 1}通り、残り${n - 2}人=${fact(n - 2)}通り。かけ合わせる` };
 }
 
 // ── u2 確率の基本（さいころ・硬貨） ──
@@ -46,9 +54,16 @@ function genProbBasic(r, level) {
     const k = r(0, 2), fav = [1, 2, 1][k];
     return { q: `2枚の硬貨を同時に投げるとき、表がちょうど ${k} 枚出る確率を求めなさい。`, ans: frac(fav, 4), choices: fchoices(fav, 4, r), h1: H.prob.h1, h2: "表裏の出方は全部で 2×2=4 通り" };
   }
-  // 発展：3枚の硬貨で表がちょうどk枚（全8通り。1/3/3/1）
-  const k = r(0, 3), fav = [1, 3, 3, 1][k];
-  return { q: `3枚の硬貨を同時に投げるとき、表がちょうど ${k} 枚出る確率を求めなさい。`, ans: frac(fav, 8), choices: fchoices(fav, 8, r), h1: H.prob.h1, h2: "出方は全部で 2×2×2=8 通り" };
+  if (level === "advanced") {
+    // 発展：3枚の硬貨で表がちょうどk枚（全8通り。1/3/3/1）
+    const k = r(0, 3), fav = [1, 3, 3, 1][k];
+    return { q: `3枚の硬貨を同時に投げるとき、表がちょうど ${k} 枚出る確率を求めなさい。`, ans: frac(fav, 8), choices: fchoices(fav, 8, r), h1: H.prob.h1, h2: "出方は全部で 2×2×2=8 通り" };
+  }
+  // oni：3枚の硬貨で表が k 枚以上（全8通り。累積 1/3/3/1）
+  const k = r(1, 3);
+  const counts = [1, 3, 3, 1];      // 表0,1,2,3枚の場合の数
+  let fav = 0; for (let t = k; t <= 3; t++) fav += counts[t];
+  return { q: `3枚の硬貨を同時に投げるとき、表が ${k} 枚以上出る確率を求めなさい。`, ans: frac(fav, 8), choices: fchoices(fav, 8, r), h1: H.prob.h1, h2: `出方は全部で8通り。表が${k}枚以上は ${fav} 通り。${fav}/8 を約分` };
 }
 
 // ── u3 確率の応用（玉・2つのさいころ） ──
@@ -62,16 +77,28 @@ function genProbAdv(r, level) {
     const k = r(3, 11), fav = sumCount(k);
     return { q: `2つのさいころを同時に投げるとき、出た目の和が ${k} になる確率を求めなさい。`, ans: frac(fav, 36), choices: fchoices(fav, 36, r), h1: H.prob.h1, h2: `和が${k}は ${fav} 通り。${fav}/36 を約分` };
   }
-  // 和が k 以上
-  const k = r(8, 11);
-  let fav = 0; for (let s = k; s <= 12; s++) fav += sumCount(s);
-  return { q: `2つのさいころを同時に投げるとき、出た目の和が ${k} 以上になる確率を求めなさい。`, ans: frac(fav, 36), choices: fchoices(fav, 36, r), h1: H.prob.h1, h2: `和が${k}以上の通り数を数えて 36 で割る` };
+  if (level === "advanced") {
+    // 和が k 以上
+    const k = r(8, 11);
+    let fav = 0; for (let s = k; s <= 12; s++) fav += sumCount(s);
+    return { q: `2つのさいころを同時に投げるとき、出た目の和が ${k} 以上になる確率を求めなさい。`, ans: frac(fav, 36), choices: fchoices(fav, 36, r), h1: H.prob.h1, h2: `和が${k}以上の通り数を数えて 36 で割る` };
+  }
+  // oni：2つのさいころで出た目の積が m の倍数になる確率（全36通り）
+  const m = r(2, 4);  // 2,3,4 の倍数
+  let fav = 0;
+  for (let x = 1; x <= 6; x++) for (let y = 1; y <= 6; y++) if ((x * y) % m === 0) fav++;
+  return { q: `2つのさいころを同時に投げるとき、出た目の積が ${m} の倍数になる確率を求めなさい。`, ans: frac(fav, 36), choices: fchoices(fav, 36, r), h1: H.prob.h1, h2: `36通りのうち積が${m}の倍数は ${fav} 通り。${fav}/36 を約分` };
 }
 
+// 各レベル10問ずつ（同じ作問関数を10通りの乱数で出す。id は連番で重複なし）＋ oni を新設
+const N = 10;
+const seq = (fn, idp, level, tag, skill) =>
+  Array.from({ length: N }, (_, i) => p(`${idp}${tag}${i + 1}`, (r) => fn(r, level), skill));
 const lv = (fn, idp, skill) => ({
-  easy: [p(idp + "e", (r) => fn(r, "easy"), skill)],
-  standard: [p(idp + "s", (r) => fn(r, "standard"), skill)],
-  advanced: [p(idp + "a", (r) => fn(r, "advanced"), skill)],
+  easy: seq(fn, idp, "easy", "e", skill),
+  standard: seq(fn, idp, "standard", "s", skill),
+  advanced: seq(fn, idp, "advanced", "a", skill),
+  oni: seq(fn, idp, "oni", "o", skill),
 });
 
 export const chapter = {

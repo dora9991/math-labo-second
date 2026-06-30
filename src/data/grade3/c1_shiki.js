@@ -136,8 +136,24 @@ function genOniExpn(r) {
   return { q, ans, choices: exprChoices(ans, variants, fillersPoly(ansT), r), h1: "分配法則(FOIL)で4つの積を全部たす", h2: `x²係数=${a}×${c}、定数=${b}×${d}、真ん中=${a}×${d}+${b}×${c}` };
 }
 
-const single = (fn, id, skill) => [p(id, fn, skill)];
-const lv = (fn, idp, skill) => ({ easy: single(fn, idp + "e", skill), standard: single(fn, idp + "s", skill), advanced: single(fn, idp + "a", skill), oni: single((r) => genOniExpn(r), idp + "o", skill) });
+// 各単元：難易度ごとに生成テンプレを 10 個ずつ置く（1テンプレで毎回ちがう問題を生成）。
+//  ・各レベルの 10 テンプレは同じ生成関数 fn を使う＝呼び出しごとに係数がランダムに変わるので、
+//    出題時には毎回ちがう問題になる（id は重複しないよう連番で振る）。
+//  ・oni（鬼）は「全単元共通の (ax+b)(cx+d) 展開 genOniExpn」と「その単元の generator fn」を
+//    交互に混ぜ、発展のさらに上の難問として 10 個用意する（答えは1つに定まる式/数値）。
+const N = 10; // 各レベルの問題数
+const mkList = (idp, lvl, fn, skill) =>
+  Array.from({ length: N }, (_, i) => p(`${idp}${lvl}${i + 1}`, (r) => fn(r), skill));
+const mkOni = (idp, fn, skill) =>
+  Array.from({ length: N }, (_, i) =>
+    p(`${idp}o${i + 1}`, (r) => (i % 2 === 0 ? genOniExpn(r) : fn(r)), skill)
+  );
+const lv = (fn, idp, skill) => ({
+  easy: mkList(idp, "e", fn, skill),
+  standard: mkList(idp, "s", fn, skill),
+  advanced: mkList(idp, "a", fn, skill),
+  oni: mkOni(idp, fn, skill), // 🔥鬼（共通の(ax+b)(cx+d)展開＋その単元の難問）
+});
 
 export const chapter = {
   id: "g3c1",

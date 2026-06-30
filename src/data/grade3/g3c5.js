@@ -47,7 +47,50 @@ function genShadow(r) {
   return { q: `高さ ${h}m の棒の影が ${s}m のとき、同じ時刻に影が ${treeShadow}m の木の高さは何mですか。`, ans: x, choices: numChoices(x, r, [treeShadow - s + h, h + treeShadow - s, treeShadow]), h1: "同じ時刻なら 高さ:影 の比は等しい", h2: `${h}:${s} = x:${treeShadow} → x=${x}` };
 }
 
-const single = (fn, idp, skill) => ({ easy: [p(idp + "e", (r) => fn(r, "easy"), skill)], standard: [p(idp + "s", (r) => fn(r, "standard"), skill)], advanced: [p(idp + "a", (r) => fn(r, "advanced"), skill)] });
+// ── 🔥鬼（oni）：各単元の応用難問。答えは1つの数値、必ず割り切れる構成 ──
+
+// u1 鬼：平行線と線分の比／中点連結の応用。DE//BC, AD:DB=p:q, DE → BC を求める
+//   AD:AB = p:(p+q) より DE:BC = p:(p+q) なので BC = DE×(p+q)÷p（pで割り切れる長さにする）
+function genOniProp(r) {
+  const [pp, qq] = rpick(r, COP);
+  const k = r(2, 6);
+  const DE = pp * k;                       // DE は pp の倍数 → BC が必ず整数
+  const BC = DE * (pp + qq) / pp;          // = (pp+qq)×k
+  return { q: `△ABC で DE//BC、点D・EはそれぞれAB・AC上にあります。AD:DB=${pp}:${qq}、DE=${DE} のとき、BC の長さを求めなさい。`, ans: BC, choices: numChoices(BC, r, [DE + qq, DE * qq / pp + DE, DE + DE]), h1: "DE//BC のとき AD:AB=DE:BC（AD:AB=AD:(AD+DB)）", h2: `DE:BC=${pp}:${pp + qq} → BC=${DE}×${pp + qq}÷${pp}=${BC}` };
+}
+
+// u2 鬼：相似比から実際の面積・体積を求める。小さい方の面積/体積→大きい方
+//   面積比 m²:n²（または体積比 m³:n³）。S=m²t と置けば大きい方 n²t は必ず整数
+function genOniRatio(r) {
+  const [m, n] = rpick(r, COP);            // m<n
+  const t = r(2, 6);
+  if (r(0, 1) === 0) {
+    const Ssmall = m * m * t, Sbig = n * n * t;
+    return { q: `相似な2つの図形があり、相似比は ${m}:${n} です。小さい方の面積が ${Ssmall}cm² のとき、大きい方の面積を求めなさい。`, ans: Sbig, choices: numChoices(Sbig, r, [Ssmall * n / m, Ssmall + (n - m), Ssmall * (n - m)]), h1: H.ratio.h1, h2: `面積比 ${m}²:${n}²=${m * m}:${n * n}。${Ssmall}×${n * n}÷${m * m}=${Sbig}` };
+  }
+  const Vsmall = m * m * m * t, Vbig = n * n * n * t;
+  return { q: `相似な2つの立体があり、相似比は ${m}:${n} です。小さい方の体積が ${Vsmall}cm³ のとき、大きい方の体積を求めなさい。`, ans: Vbig, choices: numChoices(Vbig, r, [Vsmall * n / m, Vsmall * (n * n) / (m * m), Vsmall + Vsmall]), h1: H.ratio.h1, h2: `体積比 ${m}³:${n}³=${m * m * m}:${n * n * n}。${Vsmall}×${n * n * n}÷${m * m * m}=${Vbig}` };
+}
+
+// u3 鬼：縮図（地図の縮尺）の応用。縮尺 1:N、地図上 a cm → 実際の距離（m）
+//   実際の長さ = a×N cm = a×N÷100 m（100で割り切れる N のみ採用）
+function genOniShadow(r) {
+  const N = rpick(r, [1000, 2000, 5000, 10000, 25000, 50000]);
+  const aCm = r(2, 12);
+  const realM = aCm * N / 100;             // N は全て100の倍数 → 必ず整数
+  return { q: `縮尺 1:${N} の地図上で、2地点間の長さが ${aCm}cm でした。実際の距離は何mですか。`, ans: realM, choices: numChoices(realM, r, [aCm * N, realM / 10, realM * 10]), h1: "縮尺 1:N は『地図上の長さ×N＝実際の長さ』。単位はcm→mに直す", h2: `${aCm}×${N}=${aCm * N}cm=${realM}m` };
+}
+
+// 各レベル10問に拡張：同じ生成器を id を変えて10個並べる（毎回ランダム生成）
+const tens = (idp, suffix, build, skill) =>
+  Array.from({ length: 10 }, (_, i) => p(idp + suffix + (i + 1), build, skill));
+
+const lv = (fn, oni, idp, skill) => ({
+  easy: tens(idp, "e", (r) => fn(r, "easy"), skill),
+  standard: tens(idp, "s", (r) => fn(r, "standard"), skill),
+  advanced: tens(idp, "a", (r) => fn(r, "advanced"), skill),
+  oni: tens(idp, "o", (r) => oni(r), skill),
+});
 
 export const chapter = {
   id: "g3c5",
@@ -56,8 +99,8 @@ export const chapter = {
   color: "#a78bfa",
   grade: 3,
   units: [
-    { id: "g3c5u1", name: "比例式とxの値", emoji: "➗", desc: "a:b=c:x", problems: single(genProp, "g3c5u1", "S-SIM-PROP") },
-    { id: "g3c5u2", name: "相似な図形の面積比・体積比", emoji: "📐", desc: "m²:n²・m³:n³", problems: single(genRatio, "g3c5u2", "S-SIM-RATIO") },
-    { id: "g3c5u3", name: "相似の利用（影と測定）", emoji: "🌳", desc: "影で高さを測る", problems: single(genShadow, "g3c5u3", "S-SIM-USE") },
+    { id: "g3c5u1", name: "比例式とxの値", emoji: "➗", desc: "a:b=c:x", problems: lv(genProp, genOniProp, "g3c5u1", "S-SIM-PROP") },
+    { id: "g3c5u2", name: "相似な図形の面積比・体積比", emoji: "📐", desc: "m²:n²・m³:n³", problems: lv(genRatio, genOniRatio, "g3c5u2", "S-SIM-RATIO") },
+    { id: "g3c5u3", name: "相似の利用（影と測定）", emoji: "🌳", desc: "影で高さを測る", problems: lv(genShadow, genOniShadow, "g3c5u3", "S-SIM-USE") },
   ],
 };

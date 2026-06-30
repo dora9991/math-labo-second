@@ -166,12 +166,24 @@ function genOni(r) {
   return { q, ans, choices: exprChoices(ans, variants, fill, r), h1: "累乗を先に計算→かけ算・わり算を前から順に", h2: "( )²は係数も指数も2倍。約分・符号に注意" };
 }
 
-// 各単元：難易度ごとに生成テンプレを置く（1テンプレで毎回ちがう問題を生成）
+// 各単元：難易度ごとに生成テンプレを 10 個ずつ置く（1テンプレで毎回ちがう問題を生成）。
+//  ・各レベルの 10 テンプレは同じ生成関数を使う＝呼び出しごとに係数がランダムに変わるので、
+//    出題時には毎回ちがう問題になる（id は重複しないよう連番で振る）。
+//  ・oni（鬼）は「その単元の発展(advanced)の難問」＋「全単元共通の累乗込み乗除混合(genOni)」を
+//    交互に混ぜ、発展のさらに上の難問として 10 個用意する（答えは1つに定まる式/数値）。
+const N = 10; // 各レベルの問題数
+const mkList = (idp, lvl, fn, skill) =>
+  Array.from({ length: N }, (_, i) => p(`${idp}${lvl}${i + 1}`, (r) => fn(r, lvl), skill));
+// oni 用：その単元の generator を advanced で出す問題と、共通 genOni を交互に
+const mkOni = (idp, fn, skill) =>
+  Array.from({ length: N }, (_, i) =>
+    p(`${idp}o${i + 1}`, (r) => (i % 2 === 0 ? genOni(r) : fn(r, "advanced")), skill)
+  );
 const lv = (fn, idp, skill) => ({
-  easy: [p(idp + "e", (r) => fn(r, "easy"), skill)],
-  standard: [p(idp + "s", (r) => fn(r, "standard"), skill)],
-  advanced: [p(idp + "a", (r) => fn(r, "advanced"), skill)],
-  oni: [p(idp + "o", (r) => genOni(r), skill)], // 🔥鬼（全単元共通：累乗を含む乗除混合）
+  easy: mkList(idp, "e", fn, skill),
+  standard: mkList(idp, "s", fn, skill),
+  advanced: mkList(idp, "a", fn, skill),
+  oni: mkOni(idp, fn, skill), // 🔥鬼（発展の難問＋累乗を含む乗除混合）
 });
 
 export const chapter = {
