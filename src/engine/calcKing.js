@@ -31,12 +31,16 @@ export function needsWork(p) {
  */
 export function nextCalcProblem(unit, recent = []) {
   if (!unit) return null;
-  // 暗算が厳しい（ハイレベルな）問題を優先して出す
+  // ④ 応用は「鬼」問題を最優先で出す（各単元10問用意）。無ければ発展→標準にフォールバック。
+  for (let i = 0; i < 16; i++) {
+    const p = genProblem(unit, "oni", recent);
+    if (p) return { ...p, unitName: unit.name };
+  }
+  // 鬼が無い単元：暗算が厳しい発展を優先
   for (let i = 0; i < 16; i++) {
     const p = genProblem(unit, "advanced", recent);
     if (p && isHardProblem(p)) return { ...p, unitName: unit.name };
   }
-  // 見つからなければ発展（無ければ標準）をそのまま
   const p = genProblem(unit, "advanced", recent) || genProblem(unit, "standard", recent);
   return p ? { ...p, unitName: unit.name } : null;
 }
@@ -60,7 +64,13 @@ export function nextChapterCalcProblem(chapter, recent = []) {
   }
   const units = chapter.units || (chapter.problems ? [chapter] : []);
   if (!units.length) return null;
-  // ① 小単元をランダムに選びながら「作業の要る発展問題」を最優先で探す
+  // ④ 応用は「鬼」問題を最優先（各単元10問）。小単元をまたいでランダムに出す。
+  for (let i = 0; i < 28; i++) {
+    const u = pick(units);
+    const p = genProblem(u, "oni", recent);
+    if (p) return { ...p, unitName: chapter.name, subName: u.name };
+  }
+  // ① 鬼が尽きたら「作業の要る発展問題」を探す
   for (let i = 0; i < 28; i++) {
     const u = pick(units);
     const p = genProblem(u, "advanced", recent);

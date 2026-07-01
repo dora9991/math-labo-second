@@ -57,7 +57,7 @@ import { getPlayerBattleStats, BATTLE_SKILLS, battleBonuses, isCalcKingCleared, 
 import { MONSTERS, findMonster } from "./data/monsters.js";
 import Partners from "./screens/Partners.jsx";
 import { feedCost, partnerMaxLevel, recruitChance, PARTY_MAX, partnerHpLv, partnerAtkLv } from "./engine/partners.js";
-import { unitFullyStarred, nextCycleCounts, naosuSatisfied, levelAfterClear, reviewMilestonesToGrant, ratchetSkillStats, shouldAddMistake } from "./engine/progress.js";
+import { unitFullyStarred, nextCycleCounts, naosuSatisfied, levelAfterClear, reviewMilestonesToGrant, ratchetSkillStats, shouldAddMistake, initDifficulty, nextDifficulty } from "./engine/progress.js";
 import { foldSequence } from "./engine/unitMastery.js";
 import { isUnitMonsterUnlocked } from "./engine/unlock.js";
 import { challengeXp } from "./data/challenge.js";
@@ -102,6 +102,7 @@ export default function App() {
   const [scaffold, setScaffold] = useState(null); // 足場（前提もどり）{ skillId, skillName, unit, returnTo }
   const [diagnoseChapter, setDiagnoseChapter] = useState(null); // B-3「どこから始める？」診断中の章
   const skillStatsRef = useRef(data.player.skillStats || {}); // 演習バトルの適応出題が最新の習熟度を読むため
+  const battleDiffRef = useRef(initDifficulty("standard")); // ④ 演習バトルの難易度ナビ（普通開始／2ミス↓／5連正解↑）
   useEffect(() => { skillStatsRef.current = data.player.skillStats || {}; }, [data.player.skillStats]);
   const [battleKey, setBattleKey] = useState(0); // 「もう一度」で戦闘をやり直す用
   const [utChapter, setUtChapter] = useState(null); // 単元テストの対象章
@@ -1091,25 +1092,24 @@ export default function App() {
   // あんしん／じっくりのクリア後に「バトルで実践」へ進む導線。
   //  その単元のモンスターが解放済み（あんしんで easy★1 が付くと解放される）なら直接対戦、
   //  まだなら相手選択画面（バトルモード）へ。流れ：あんしん→学び直し→バトル。
-  // 演習バトルの出題＝この単元の「適応問題」（StepUpと同じ仕様：習熟に応じた難易度で1問ずつ）
-  function adaptiveLevelForUnit(unit, stats) {
-    const skills = [...new Set(["easy", "standard", "advanced"].flatMap((L) => (unit.problems?.[L] || []).map((t) => t.skill)).filter(Boolean))];
-    const avg = skills.length ? skills.reduce((s, sk) => s + ((stats[sk]?.m) ?? INITIAL_MASTERY), 0) / skills.length : INITIAL_MASTERY;
-    const has = (L) => (unit.problems?.[L]?.length || 0) > 0;
-    let lvl = avg < 0.45 ? "easy" : avg < 0.72 ? "standard" : "advanced"; // 期待正答率≈0.75を狙う簡易版
-    if (!has(lvl)) lvl = has("standard") ? "standard" : has("easy") ? "easy" : "advanced";
-    return lvl;
-  }
+  // 演習バトルの出題＝この単元の問題を、難易度ナビ（④）で選んだレベルで1問ずつ出す
   function battleProblemSource(unit) {
     return (lastId) => {
-      const lvl = adaptiveLevelForUnit(unit, skillStatsRef.current);
-      const p = genProblem(unit, lvl, lastId) || genProblem(unit, "easy", lastId) || genProblem(unit, "standard", lastId);
+      // ④ 難易度ナビ：ふつう開始→2ミスで↓／5連正解で↑（battleDiffRef を1問ごとに更新）
+      const lvl = battleDiffRef.current.level;
+      const p = genProblem(unit, lvl, lastId) || genProblem(unit, "standard", lastId) || genProblem(unit, "easy", lastId);
       return p ? { ...p, choices: makeChoices(p.ans) } : null; // choices→4択(数値) / 記述は自由入力
     };
+  }
+  // 演習バトルの解答1問ごと：難易度ナビを更新してから、習熟＋サイクルへ記録する
+  function recordBattlePracticeAttempt(a) {
+    battleDiffRef.current = nextDifficulty(battleDiffRef.current, !!a.ok);
+    recordStepAttempt(a);
   }
   function goBattleForUnit(unit) {
     const monster = unit && MONSTERS.find((m) => m.kind === "unit" && m.unitId === unit.id);
     if (monster) {
+      battleDiffRef.current = initDifficulty("standard"); // ④ この演習バトルは「ふつう」から始める
       // 学習サイクルの「ためす→バトル」は、未解放でもその小単元の敵と直接たたかう（一覧へは飛ばさない）。
       setBattleMonster(monster);
       setBattlePractice(unit); // ★演習バトル：出題をこの単元の適応問題にし、習熟＋サイクルを更新
@@ -1266,7 +1266,7 @@ export default function App() {
             onClick: () => { setScaffold({ ...sc, returnTo: "haichiStudioPractice" }); setScreen("scaffold"); },
           } : null}
           passActions={[
-            { label: "✏️ れんしゅう", onClick: () => { setSel({ chapter: passChapter, unit: passUnit, level: "easy" }); setScreen("anshin"); } },
+            { label: "✏️ れんしゅう", onClick: () => { setSel({ chapter: passChapter, unit: passUnit, level: "standard", nav: true }); setScreen("anshin"); } },
             { label: "⚔️ バトル", onClick: () => goBattleForUnit(passUnit) },
           ]}
         />
@@ -1394,6 +1394,7 @@ export default function App() {
         unit={sel.unit}
         level={sel.level}
         anshin
+        navDifficulty={!!sel.nav}
         onComplete={saveSlowResult}
         onBackToMap={() => setScreen("chapter")}
         onHome={() => setScreen("home")}
@@ -1576,7 +1577,7 @@ export default function App() {
         monster={battleMonster}
         maxHearts={Math.min(13, 5 + new Set((data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win" && /^boss_/.test(r.extra?.monsterId || "")).map((r) => r.extra.monsterId)).size)}
         problemSource={battlePractice ? battleProblemSource(battlePractice) : null}
-        onAttempt={battlePractice ? recordStepAttempt : null}
+        onAttempt={battlePractice ? recordBattlePracticeAttempt : null}
         ally={(() => {
           const id = data.player.activePartner;
           const e = id ? data.player.partners?.[id] : null;
@@ -1648,7 +1649,7 @@ export default function App() {
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}
       onDiagnose={(ch) => { setDiagnoseChapter(ch); setScreen("diagnose"); }}
-      onUnitPractice={(chapter, unit) => { setSel({ chapter, unit, level: "easy" }); setScreen("anshin"); }}
+      onUnitPractice={(chapter, unit) => { setSel({ chapter, unit, level: "standard", nav: true }); setScreen("anshin"); }}
       onUnitBattle={(unit) => goBattleForUnit(unit)}
       onClinic={() => setScreen("clinic")}
       onUnitTest={() => { setUtChapter(null); setScreen("unitTest"); }}

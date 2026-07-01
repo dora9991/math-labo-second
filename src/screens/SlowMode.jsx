@@ -20,10 +20,12 @@ import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, makeChoices } from "../engine/generator.js";
 import { isCorrect, SLOW_TARGET, slowXp, xpRepeatMultiplier, CYCLE_PRACTICE_TARGET } from "../engine/scoring.js";
+import { initDifficulty, nextDifficulty, PRACTICE_LEVELS } from "../engine/progress.js";
 
 const todayStr = () => new Date().toLocaleDateString("ja-JP");
 // れんしゅう（あんしん）の目標＝サイクルの「ためす」達成数に揃える（1ラウンド完走＝ためす完了で混乱を無くす）
 const ANSHIN_TARGET = CYCLE_PRACTICE_TARGET;
+const LEVEL_LABEL = { easy: "かんたん", standard: "ふつう", advanced: "発展" };
 
 // 4択ヘルパー（タイムアタックと同じ。式の4択＝文字列厳密一致／数値＝makeChoices＋数値照合）
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
@@ -31,10 +33,15 @@ const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
 const choicesFor = (q) => (hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans));
 const ansEq = (val, q) => (hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans));
 
-export default function SlowMode({ player, chapter, unit, level, anshin = false, onComplete, onBackToMap, onHome, onRelearn, onBattle, onHaichi }) {
+export default function SlowMode({ player, chapter, unit, level, anshin = false, navDifficulty = false, onComplete, onBackToMap, onHome, onRelearn, onBattle, onHaichi }) {
   const target = anshin ? ANSHIN_TARGET : SLOW_TARGET[level];
-  // ★2 あんしんモードは最初の1問を必ず「かんたん」から出す
-  const [q, setQ] = useState(() => genProblem(unit, anshin ? "easy" : level));
+  // ④ 難易度ナビ：navDifficulty のときは「ふつう」から始め、2ミスで↓／5連正解で↑（progress.js のルール）
+  const diffRef = useRef(initDifficulty("standard"));
+  const [navLevel, setNavLevel] = useState("standard"); // 表示用の現在レベル
+  const [diffToast, setDiffToast] = useState(null);      // 難易度が変わった時のひとこと { up, label }
+  // 出題する難易度：nav時は「ふつう」開始／あんしんは「かんたん」開始／じっくりは選んだ level
+  const firstLevel = navDifficulty ? "standard" : anshin ? "easy" : level;
+  const [q, setQ] = useState(() => genProblem(unit, firstLevel));
   const [choices, setChoices] = useState(() => (q ? choicesFor(q) : []));
   const [streak, setStreak] = useState(0);
   const [total, setTotal] = useState(0);
@@ -55,9 +62,24 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
   const progress = anshin ? correct : streak;
 
   function nextQuestion() {
-    const nq = genProblem(unit, level, q?.id); // 2問目以降は選んだ難易度
+    const lv = navDifficulty ? diffRef.current.level : level; // nav時は自動調整された難易度
+    const nq = genProblem(unit, lv, q?.id); // 2問目以降は選んだ難易度
     if (nq) { setQ(nq); setChoices(choicesFor(nq)); }
     setSelected(null); setLocked(false); setHintLevel(0); setFifty([]);
+  }
+
+  // ④ 1問の正誤から難易度を更新（nav時のみ）。段が変わったら短いひとことを出す。
+  function updateNavDifficulty(ok) {
+    if (!navDifficulty) return;
+    const prev = diffRef.current;
+    const nd = nextDifficulty(prev, ok);
+    if (nd.changed) {
+      const up = PRACTICE_LEVELS.indexOf(nd.level) > PRACTICE_LEVELS.indexOf(prev.level);
+      setDiffToast({ up, label: LEVEL_LABEL[nd.level] });
+      setTimeout(() => setDiffToast(null), 2200);
+    }
+    diffRef.current = nd;
+    setNavLevel(nd.level);
   }
 
   // 50:50：まちがいの選択肢を2つ消して2択にする（★6）
@@ -72,6 +94,7 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
     setLocked(true); setSelected(idx);
     const ok = ansEq(val, q);
     setTotal((t) => t + 1);
+    updateNavDifficulty(ok); // ④ 次の問題の難易度を調整（nav時のみ）
 
     if (ok) {
       const ns = streak + 1;
@@ -192,8 +215,21 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
         {/* 一問ごとのひとこと */}
         <CharBubble text={msg} />
 
+        {/* ④ 難易度が変わったときのお知らせ（普通⇄かんたん／発展） */}
+        {diffToast && (
+          <div style={{
+            margin: "0 0 10px", padding: "9px 13px", borderRadius: 11, textAlign: "center",
+            fontSize: 13, fontWeight: 900, lineHeight: 1.4,
+            color: diffToast.up ? "#065f46" : "#7c2d12",
+            background: diffToast.up ? "rgba(74,222,128,.9)" : "rgba(251,191,36,.9)",
+            border: diffToast.up ? "1.5px solid #16a34a" : "1.5px solid #d97706",
+          }}>
+            {diffToast.up ? `🔥 いい調子！「${diffToast.label}」に レベルアップ！` : `🌱 むずかしさを「${diffToast.label}」にしたよ`}
+          </div>
+        )}
+
         <div className="qcard">
-          <span className="q-pill">{unit.name} ・ {anshin ? "あんしん" : "じっくり"}</span>
+          <span className="q-pill">{unit.name} ・ {navDifficulty ? LEVEL_LABEL[navLevel] : anshin ? "あんしん" : "じっくり"}</span>
           <div className="q-text"><QuestionText text={q.q} furigana={!!player.furigana} readAloud={!!player.readAloud} /></div>
 
           {/* ヒント（問題に h1 がある＝主に中1の生成問題） */}
