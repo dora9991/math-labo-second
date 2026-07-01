@@ -57,7 +57,7 @@ import { getPlayerBattleStats, BATTLE_SKILLS, battleBonuses, isCalcKingCleared, 
 import { MONSTERS, findMonster } from "./data/monsters.js";
 import Partners from "./screens/Partners.jsx";
 import { feedCost, partnerMaxLevel, recruitChance, PARTY_MAX, partnerHpLv, partnerAtkLv } from "./engine/partners.js";
-import { unitFullyStarred } from "./engine/progress.js";
+import { unitFullyStarred, nextCycleCounts, naosuSatisfied, levelAfterClear, reviewMilestonesToGrant, ratchetSkillStats, shouldAddMistake } from "./engine/progress.js";
 import { foldSequence } from "./engine/unitMastery.js";
 import { isUnitMonsterUnlocked } from "./engine/unlock.js";
 import { challengeXp } from "./data/challenge.js";
@@ -436,19 +436,14 @@ export default function App() {
   function bumpCycle(unitId, { practice = 0, relearn = 0, mistakeNow = false } = {}) {
     if (!unitId || (!practice && !relearn)) return;
     const prev = (data.player.cycle && data.player.cycle[unitId]) || {};
-    const next = {
-      ...prev,
-      practiceN: (prev.practiceN || 0) + practice,
-      relearnN: (prev.relearnN || 0) + relearn,
-      lecture: !!prev.lecture, cleared: !!prev.cleared,
-    };
+    const next = nextCycleCounts(prev, { practice, relearn }); // 進捗ルールは engine/progress.js に一元化
     // 講義（確認問題）クリア：その単元の葉一レッスンの合格を見る（レッスンが無ければ自動OK）
     const lessonFound = findHaichiLessonForUnit(unitId);
     const lessonKey = lessonFound ? `g${lessonFound.grade}m${lessonFound.lesson.n}` : null;
     const lectureOK = !lessonFound || !!(data.player.haichiPassed && data.player.haichiPassed[lessonKey]);
     // なおすクリア：学び直しで正解、または直すべき間違いがそもそも無い（詰まり防止）
     const unitHasMistakes = mistakeNow || (data.mistakes || []).some((m) => m.unitId === unitId);
-    const naosuOK = next.relearnN >= CYCLE_RELEARN_TARGET || !unitHasMistakes;
+    const naosuOK = naosuSatisfied(next.relearnN, unitHasMistakes);
     const wasCleared = !!next.cleared; // この呼び出し前から既にクリア済み（＝解き直し＝間隔反復の復習対象）
     const newlyCleared = !next.cleared && isUnitCycleCleared({ lectureOK, practiceN: next.practiceN, naosuOK });
     if (newlyCleared) { next.cleared = true; next.clearedAt = Date.now(); } // 初クリア日時を記録（復習ボーナス判定に使う）
@@ -456,10 +451,8 @@ export default function App() {
     const today = todayStr();
     const world = data.player.world || 1;
     const unitsW = chaptersForGrade(world).flatMap((c) => c.units || []);
-    // クリア後のレベル（演出用）＝1＋（この学年で cleared な単元数）。今クリアした分を+1。
-    const newLevel = newlyCleared
-      ? 1 + unitsW.filter((u) => u.id === unitId || data.player.cycle?.[u.id]?.cleared).length
-      : null;
+    // クリア後のレベル（演出用）＝1＋（この学年で cleared な単元数）。今クリアした分も数える。
+    const newLevel = newlyCleared ? levelAfterClear(data.player.cycle || {}, unitsW, unitId) : null;
 
     updatePlayer((p) => {
       const cyc = { ...(p.cycle || {}), [unitId]: next };
@@ -489,11 +482,7 @@ export default function App() {
   // 間隔反復の復習ボーナス：クリア済みの単元を「1日後」「1週間後」に解き直したら 剣石+鎧石。各マイルストーン1回だけ。
   function maybeReviewBonus(unitId) {
     const cyc = (data.player.cycle && data.player.cycle[unitId]) || {};
-    if (!cyc.cleared || !cyc.clearedAt) return;
-    const days = (Date.now() - cyc.clearedAt) / 86400000;
-    const give = [];
-    if (days >= 1 && !cyc.r1) give.push("d1");   // 初クリアから1日以上たって解き直した
-    if (days >= 7 && !cyc.r7) give.push("d7");   // 初クリアから1週間以上たって解き直した
+    const give = reviewMilestonesToGrant(cyc, Date.now()); // 1日後/1週間後の窓判定は progress.js に一元化
     if (!give.length) return;
     const add = give.length; // 1日と1週間が同時に開いていれば +2
     updatePlayer((p) => {
@@ -514,26 +503,14 @@ export default function App() {
 
   // B-3 診断「どこから始める？」の結果を skillStats にラチェット反映（正解スキルだけ上げる・下げない）。
   function applyDiagnosis(results = []) {
-    updatePlayer((p) => {
-      const ss = { ...(p.skillStats || {}) };
-      for (const r of results) {
-        if (r.ok && r.skill) {
-          const prev = ss[r.skill] || { m: 0.5, n: 0 };
-          ss[r.skill] = { m: Math.max(prev.m ?? 0.5, 0.8), n: (prev.n || 0) + 1, last: todayStr() };
-        }
-      }
-      return { ...p, skillStats: ss };
-    });
+    updatePlayer((p) => ({ ...p, skillStats: ratchetSkillStats(p.skillStats || {}, results, todayStr()) }));
   }
 
   // 同じ小単元で「2回連続まちがえた」時だけ学び直しに追加する（学び直しに入りすぎないように）。
   const wrongStreakRef = useRef({}); // { [unitId]: 連続まちがい数 }（正解でリセット）
   function streakMistake(unitId, ok, makeIt) {
-    if (!unitId) return null;                  // 単元不明は追加しない（ノイズ減）
-    const s = wrongStreakRef.current;
-    if (ok) { s[unitId] = 0; return null; }    // 正解 → 連続リセット
-    s[unitId] = (s[unitId] || 0) + 1;
-    return s[unitId] === 2 ? makeIt() : null;  // ちょうど2連続になった時だけ追加
+    // 「同じ単元で2連続まちがえた時だけ追加」の判定は progress.js に一元化
+    return shouldAddMistake(wrongStreakRef.current, unitId, ok) ? makeIt() : null;
   }
 
   // ステップアップ（弱点克服）モード：1問ごとの結果を保存

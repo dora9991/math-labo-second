@@ -3,6 +3,11 @@
 // 「どの単元が解放済みか」「ある単元で取った星」などの判定ロジック。
 // 保存データ(playerState)を読むだけで、保存方法(local/server)には依存しない。
 // ============================================================
+import {
+  CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET,
+  MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared,
+} from "./scoring.js";
+import { GEAR_STONE_CAP } from "./gear.js";
 
 /** ある単元・難易度で取得済みの星を返す */
 export function getStars(playerState, unitId, level) {
@@ -31,4 +36,76 @@ export function chapterStarTotal(playerState, chapter, levelKeys) {
     for (const lv of levelKeys) total += getStars(playerState, u.id, lv);
   }
   return total;
+}
+
+// ============================================================
+// サイクル進捗のルール（レベル/クリスタル/石/クリア/復習/診断）
+//  ★純関数のみ★ 副作用（React更新・演出・sfx・Date.now）は含めない。
+//  App.jsx（client 楽観更新）と、将来のサーバ（権威計算）が**同じこのルール**を使う。
+//  設計: 10_Projects/math-labo/設計_サーバ移行とチート対策_2026-06-28.md（Step1）
+// ============================================================
+
+// 定数もここから参照できるよう再輸出（将来 import 先をここに寄せられる）
+export {
+  CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET,
+  MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, GEAR_STONE_CAP,
+};
+
+/** サイクル進捗（ためす/なおすの正解数）を増やした後の cycle エントリ（prev は不変） */
+export function nextCycleCounts(prev = {}, { practice = 0, relearn = 0 } = {}) {
+  return {
+    ...prev,
+    practiceN: (prev.practiceN || 0) + practice,
+    relearnN: (prev.relearnN || 0) + relearn,
+    lecture: !!prev.lecture, cleared: !!prev.cleared,
+  };
+}
+
+/** 「なおす」クリア条件：学び直しで目標数正解、または直すべき間違いがそもそも無い */
+export function naosuSatisfied(relearnN = 0, hasMistakes = false) {
+  return (relearnN || 0) >= CYCLE_RELEARN_TARGET || !hasMistakes;
+}
+
+/** この学年で「サイクルクリア済み」の単元数（＝レベルの素）。unitsInWorld はその学年の全単元 */
+export function clearedCountInWorld(cycleMap = {}, unitsInWorld = []) {
+  return unitsInWorld.filter((u) => cycleMap[u.id]?.cleared).length;
+}
+
+/** レベル＝1＋クリア単元数。extraClearedId を渡すとその単元を「今クリアした」と仮定して数える */
+export function levelAfterClear(cycleMap = {}, unitsInWorld = [], extraClearedId = null) {
+  const map = extraClearedId
+    ? { ...cycleMap, [extraClearedId]: { ...(cycleMap[extraClearedId] || {}), cleared: true } }
+    : cycleMap;
+  return 1 + clearedCountInWorld(map, unitsInWorld);
+}
+
+/** 間隔反復：クリア済み単元を解き直した時に付与すべきマイルストーン（["d1"]/["d7"]/["d1","d7"]/[]） */
+export function reviewMilestonesToGrant(cyc = {}, nowMs = 0) {
+  if (!cyc.cleared || !cyc.clearedAt) return [];
+  const days = (nowMs - cyc.clearedAt) / 86400000;
+  const give = [];
+  if (days >= 1 && !cyc.r1) give.push("d1"); // 初クリアから1日以上
+  if (days >= 7 && !cyc.r7) give.push("d7"); // 初クリアから1週間以上
+  return give;
+}
+
+/** 診断結果を skillStats にラチェット反映（正解スキルだけ m を 0.8 以上へ・下げない）。純粋 */
+export function ratchetSkillStats(skillStats = {}, results = [], today = "") {
+  const ss = { ...skillStats };
+  for (const r of results) {
+    if (r.ok && r.skill) {
+      const prev = ss[r.skill] || { m: 0.5, n: 0 };
+      ss[r.skill] = { m: Math.max(prev.m ?? 0.5, 0.8), n: (prev.n || 0) + 1, last: today };
+    }
+  }
+  return ss;
+}
+
+/** 学び直しへの追加判定：同じ小単元で「2回連続まちがえた」時だけ true。
+ *  streakMap を破壊的に更新（正解で0リセット／不正解で+1）＝入りすぎ防止の一元ルール。 */
+export function shouldAddMistake(streakMap, unitId, ok) {
+  if (!unitId) return false;
+  if (ok) { streakMap[unitId] = 0; return false; }
+  streakMap[unitId] = (streakMap[unitId] || 0) + 1;
+  return streakMap[unitId] === 2;
 }
