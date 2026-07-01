@@ -12,22 +12,11 @@ import { BigWord } from "../components/Decorations.jsx";
 import MathText from "../components/MathText.jsx";
 import * as sfx from "../audio/sfx.js";
 import * as bgm from "../audio/bgm.js";
-import { isCorrect, parseAnswer } from "../engine/scoring.js";
+import { answerMatches } from "../engine/scoring.js";
 import { nextChapterCalcProblem, formatTime } from "../engine/calcKing.js";
 
 const GOAL = 5; // この問数を解き終わるとタイムが記録される
-
-// 答え合わせ。数値で表せる答え（5・1/2・−8/3 など）は数値照合、
-// それ以外（連立「x=4, y=−1」や式「5a+3b」など）は空白・記号をそろえて文字列一致。
-const PURE_NUM = /^[-−ー―+]?[\d.]+(\/[\d.]+)?$/;
-function answerMatches(input, ans) {
-  const clean = String(ans).replace(/\s/g, "").replace(/／/g, "/");
-  if (typeof ans === "number" || (Number.isFinite(parseAnswer(ans)) && PURE_NUM.test(clean))) {
-    return isCorrect(input, parseAnswer(ans));
-  }
-  const norm = (s) => String(s).replace(/\s/g, "").replace(/ー|−|―/g, "-").replace(/／/g, "/").toLowerCase();
-  return norm(input) === norm(ans);
-}
+// 答え合わせは engine/scoring.js の answerMatches に一元化（サーバ採点 grade.js と同じ判定）。
 
 export default function Challenge({ player, chapter, onResult, onMistake, onBack, onHome }) {
   // 自己ベスト（その単元の開始時点の値を保持。結果画面で「新記録」判定に使う）

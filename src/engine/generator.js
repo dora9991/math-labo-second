@@ -11,6 +11,8 @@
 // 画面側は「genProblem / buildTemplate を呼ぶだけ」で済むようにしている。
 // ============================================================
 import { rng, pick } from "./rng.js";
+import { randomSeed } from "./seed.js";
+import { buildSeeded } from "./grade.js";
 import { dbTemplatesFor } from "../data/dbProblems.js";
 
 // DB実問題を出す割合（手続き生成より優先。手続きは変化球として残す）
@@ -29,6 +31,37 @@ function makeFromTemplate(template, unit, level) {
     }
   }
   return null;
+}
+
+// ── Step2：seed から決定的に1問を作る（サーバが再現・採点するための土台）──
+//  makeFromTemplate と同じ skip ループを、seed 由来の r で回すので q/ans が完全に再現される。
+//  ★純粋（Math.random を使わない）★ ので Deno の Edge Function からも同じ結果で呼べる。
+
+/** テンプレIDと seed から1問を決定的に作る（採点と同じ grade.buildSeeded を使う＝ズレない） */
+export function buildFromSeed(unit, level, templateId, seed) {
+  return buildSeeded(unit, level, templateId, seed);
+}
+
+/** ランダム seed で1問を作り、seed も一緒に返す（クライアントが「あとで再現できる問題」を出す用）。
+ *  DB由来（固定 q/ans）のテンプレは seed 不要なので seed=null で返す。手続き生成のみ seed を持つ。 */
+export function genProblemSeeded(unit, level, lastId = null) {
+  const proc = unit?.problems?.[level] || [];
+  if (proc.length === 0) {
+    const p = genProblem(unit, level, lastId); // DB専用単元など：従来どおり（再現不要）
+    return p ? { ...p, seed: null } : null;
+  }
+  const recent = Array.isArray(lastId) ? lastId : lastId == null ? [] : [lastId];
+  const usable = proc.filter((t) => !recent.includes(t.id));
+  const from = usable.length ? usable : proc;
+  // seed を引いて作る。まれに skip 続きで null になるテンプレがあるので、数回だけ引き直す。
+  for (let tries = 0; tries < 8; tries++) {
+    const t = pick(from);
+    const seed = randomSeed();
+    const p = buildFromSeed(unit, level, t.id, seed);
+    if (p) return p; // p.seed から server が同じ q/ans を再現できる
+  }
+  const p = genProblem(unit, level, lastId); // 最後の保険（seed なし）
+  return p ? { ...p, seed: null } : null;
 }
 
 /**

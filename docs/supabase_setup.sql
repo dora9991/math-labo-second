@@ -30,16 +30,49 @@ drop policy if exists "students self update" on public.students;
 create policy "students self update" on public.students
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
--- ⚠️ 将来 player_state（レベル/クリスタル/石など）を作る時の鉄則：
---   ・player_state は client の insert/update を一切許可しない（select だけ）。
---   ・更新は Edge Function（service_role）だけが、採点済みの attempts から行う。
---   ＝ membership-site で起きた「self update で role を admin に自己昇格」と同型の穴を作らないため。
---
--- 例（Step3 で有効化する雛形・今は実行しない）：
---   create table public.player_state (
---     student_id uuid primary key references public.students(id) on delete cascade,
---     world int, world_cleared jsonb, cycle jsonb, coins int, crystals int,
---     gear jsonb, skill_stats jsonb, updated_at timestamptz default now());
---   alter table public.player_state enable row level security;
---   create policy "ps self select" on public.player_state for select using (auth.uid() = student_id);
---   -- insert/update ポリシーは作らない（＝クライアントからは書けない。service_role のみ）。
+-- ============================================================
+-- Step3：サーバ権威のプレイヤー状態と、解答ログ
+--  ⚠️ 鉄則：player_state / attempts は client の insert/update を一切許可しない（select だけ）。
+--    更新は Edge Function（service_role）だけが、採点結果から行う。
+--    ＝ membership-site で起きた「self update で role を admin に自己昇格」と同型の穴を作らないため。
+--  ※ AUTH＋サーバ権威を使わないなら、この節は実行しなくてよい（Step0だけでも動く）。
+-- ============================================================
+
+-- プレイヤー状態（レベル・クリスタル・石・装備など）。中身は state(jsonb) に丸ごと。
+--  検索/教師ダッシュボード用に world・level・coins・crystals だけ列にも出しておく（表示用ミラー）。
+create table if not exists public.player_state (
+  student_id  uuid primary key references public.students(id) on delete cascade,
+  state       jsonb not null default '{}'::jsonb,  -- recordSchema.initialPlayerState の形をそのまま保存
+  world       int  not null default 1,
+  level       int  not null default 1,
+  coins       int  not null default 0,
+  crystals    int  not null default 0,
+  updated_at  timestamptz not null default now()
+);
+alter table public.player_state enable row level security;
+-- 本人は「読む」だけ。書き込みポリシーは作らない＝クライアントからは絶対に書けない（service_role のみ）。
+drop policy if exists "ps self select" on public.player_state;
+create policy "ps self select" on public.player_state
+  for select using (auth.uid() = student_id);
+
+-- 解答ログ（1問ごと）。サーバが採点した結果を service_role で追記する。分析・不正検知の元。
+create table if not exists public.attempts (
+  id          bigint generated always as identity primary key,
+  student_id  uuid not null references public.students(id) on delete cascade,
+  unit_id     text,
+  level       text,            -- easy/standard/advanced/oni
+  template_id text,
+  seed        bigint,          -- 問題を再現するための種（Step2）
+  ok          boolean not null,
+  mode        text,            -- practice/battle/relearn/applied ...
+  created_at  timestamptz not null default now()
+);
+alter table public.attempts enable row level security;
+create index if not exists attempts_student_created on public.attempts (student_id, created_at desc);
+-- 本人は自分のログを読めるだけ。書き込みは service_role のみ（ポリシーを作らない）。
+drop policy if exists "attempts self select" on public.attempts;
+create policy "attempts self select" on public.attempts
+  for select using (auth.uid() = student_id);
+
+-- 教師閲覧（任意・後で）：別途 role 列や teachers テーブルを足し、service_role の
+--  Edge Function 経由で集計を返す。生徒の RLS はあくまで「自分の行だけ」を維持する。

@@ -247,6 +247,22 @@ export function isCorrect(userAnswer, ans) {
   return Math.abs(u - a) < 0.05;
 }
 
+// 数値だけで表せる答え（5・1/2・−8/3 など）か判定する正規表現
+const PURE_NUM = /^[-−ー―+]?[\d.]+(\/[\d.]+)?$/;
+/**
+ * 汎用の答え合わせ：数値で表せる答えは数値照合、それ以外（"x=4, y=−1" や "5a+3b" など式）は
+ *  空白・符号・スラッシュ・大文字小文字をそろえた文字列一致で判定する。
+ *  ★クライアント各画面（Challenge等）とサーバ採点(grade.js)が“同じ判定”を使うための唯一の窓口。
+ */
+export function answerMatches(input, ans) {
+  const clean = String(ans).replace(/\s/g, "").replace(/／/g, "/");
+  if (typeof ans === "number" || (Number.isFinite(parseAnswer(ans)) && PURE_NUM.test(clean))) {
+    return isCorrect(input, parseAnswer(ans));
+  }
+  const norm = (s) => String(s).replace(/\s/g, "").replace(/ー|−|―/g, "-").replace(/／/g, "/").toLowerCase();
+  return norm(input) === norm(ans);
+}
+
 // 同じ問題（単元×難易度ごと）をくり返したときのXP倍率
 //  初クリアまで : ×1（満点）
 //  同じ日にくり返す : ×0.6
