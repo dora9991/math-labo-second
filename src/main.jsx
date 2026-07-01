@@ -4,12 +4,12 @@
 // ============================================================
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
+import AuthGate from "./auth/AuthGate.jsx"; // 認証OFF(Supabase未設定)なら中身はそのまま App（従来どおり）
 import "./styles/theme.css";
 import "./styles/battle.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <AuthGate />
   </React.StrictMode>
 );

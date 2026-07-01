@@ -14,9 +14,13 @@
 // 将来サーバー保存にするときは、同じ関数名で supabase 版を作り、import 先を差し替える。
 // ============================================================
 import { getOrCreateLocalStudentId, initialPlayerState, normalizePlayerState } from "./recordSchema.js";
+import { getActiveUid } from "../auth/session.js";
 
-const KEY = "mathApp2_data_v1";
-const BAK = "mathApp2_data_v1_bak"; // 自動バックアップ（前回保存時の中身）
+// 保存キー。ログイン中はユーザーidで分ける（同じ端末で複数人が別々の進捗を持てる）。
+//  認証OFF/未ログインは従来の共通キー（後方互換で既存データを引き継ぐ）。
+const BASE = "mathApp2_data_v1";
+const KEY = () => { const u = getActiveUid(); return u ? `${BASE}__${u}` : BASE; };
+const BAK = () => `${KEY()}_bak`; // 自動バックアップ（前回保存時の中身）
 
 function safeGet(k) {
   try { return localStorage.getItem(k); } catch { return null; }
@@ -46,18 +50,18 @@ function parseData(raw) {
 
 // 読み込み：メイン→（壊れていれば）バックアップ→（無ければ）初期データ
 function readAll() {
-  const raw = safeGet(KEY);
+  const raw = safeGet(KEY());
   if (raw) {
     try { return parseData(raw); }
     catch (e) { console.warn("メインデータが読めません。バックアップから復元を試みます:", e); }
   }
-  const bak = safeGet(BAK);
+  const bak = safeGet(BAK());
   if (bak) {
     try {
       const d = parseData(bak);
       console.warn("バックアップからデータを復元しました。");
       // 復元できたらメインにも書き戻しておく（次回から正常に）
-      safeSet(KEY, JSON.stringify(d));
+      safeSet(KEY(), JSON.stringify(d));
       return d;
     } catch (e) { console.warn("バックアップも読めません:", e); }
   }
@@ -69,10 +73,10 @@ function readAll() {
 function writeAll(data) {
   let json;
   try { json = JSON.stringify(data); } catch (e) { console.warn("保存データの変換に失敗:", e); return; }
-  const cur = safeGet(KEY);
+  const cur = safeGet(KEY());
   // 直前の正常データをバックアップへ（破壊的更新の保険）。空→中身ありの初回は退避しない。
-  if (cur && cur !== json) safeSet(BAK, cur);
-  safeSet(KEY, json);
+  if (cur && cur !== json) safeSet(BAK(), cur);
+  safeSet(KEY(), json);
 }
 
 /** 全データを読み込む */

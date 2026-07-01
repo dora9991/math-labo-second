@@ -12,9 +12,12 @@
 //   mistakes     … 間違えた問題（下の makeMistake）
 //   player_state … XP・レベル・単元ごとの星・スキル習熟度（PlayerState）
 // ============================================================
+import { getActiveUid } from "../auth/session.js";
 
-/** 端末ローカルの仮の生徒ID（サーバー化したら本物のIDに置き換える） */
+/** 生徒ID。ログイン中は本物のユーザーid（認証）、未ログイン/認証OFFは端末ローカルの仮ID。 */
 export function getOrCreateLocalStudentId() {
+  const uid = getActiveUid();
+  if (uid) return uid; // ログイン中＝記録は本人のuidに紐づく
   const KEY = "mathApp2_studentId";
   let id = localStorage.getItem(KEY);
   if (!id) {
