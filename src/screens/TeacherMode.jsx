@@ -1,0 +1,243 @@
+// ============================================================
+// TeacherMode.jsx — 「教師モード」：仮想生徒10人の実際の誤答から作った
+//  ノードグラフ対話(説明→確認クイズ→誤答なら再説明→…)を再生する画面。
+//
+//  データ：src/data/dialogue/teacherMode/{seifu,moji,eq,pr,pl,sp,dt}.json
+//  エンジン：src/data/dialogue/teacherModeEngine.js
+//  レイアウト・TTSは DialogueLesson.jsx / engine/reading.js と同じ設計を踏襲
+//  （黒板＝書いて残る／先生＝声で問いかけて消える、を空間的に分離）。
+// ============================================================
+import { useState, useEffect, useRef } from "react";
+import Header from "../components/Header.jsx";
+import { speakText, stopSpeak, speechAvailable } from "../engine/reading.js";
+import { startTeacherMode, advanceExplain, answerCheck, currentNode } from "../data/dialogue/teacherModeEngine.js";
+
+const UNIT_FILES = [
+  { key: "seifu", label: "正の数・負の数", emoji: "➕", color: "#818cf8" },
+  { key: "moji", label: "文字の式", emoji: "🔤", color: "#f472b6" },
+  { key: "eq", label: "方程式", emoji: "⚖️", color: "#fbbf24" },
+  { key: "pr", label: "比例と反比例", emoji: "📈", color: "#34d399" },
+  { key: "pl", label: "平面図形", emoji: "🔺", color: "#60a5fa" },
+  { key: "sp", label: "空間図形", emoji: "🧊", color: "#a78bfa" },
+  { key: "dt", label: "データの活用", emoji: "📊", color: "#fb7185" },
+];
+
+// 単元データは選んだときだけ読み込む（1139問ぶんを最初から全部読まない）
+const UNIT_LOADERS = {
+  seifu: () => import("../data/dialogue/teacherMode/seifu.json"),
+  moji: () => import("../data/dialogue/teacherMode/moji.json"),
+  eq: () => import("../data/dialogue/teacherMode/eq.json"),
+  pr: () => import("../data/dialogue/teacherMode/pr.json"),
+  pl: () => import("../data/dialogue/teacherMode/pl.json"),
+  sp: () => import("../data/dialogue/teacherMode/sp.json"),
+  dt: () => import("../data/dialogue/teacherMode/dt.json"),
+};
+
+// 板書1行の色分け（黒板のチョーク色。DialogueLessonのLINE_STYLEと揃える）
+const LINE_STYLE = {
+  problem: { color: "#fef9c3", fontWeight: 800 },
+  work: { color: "#bae6fd", fontWeight: 600 },
+  student: { color: "#fff", fontWeight: 700 },
+  result: { color: "#86efac", fontWeight: 900, fontSize: 19 },
+};
+
+export default function TeacherMode({ player, onBack }) {
+  const [unitKey, setUnitKey] = useState(null);
+  const [problem, setProblem] = useState(null);
+
+  if (!unitKey) return <UnitPicker player={player} onPick={setUnitKey} onBack={onBack} />;
+  if (!problem) return <ProblemPicker player={player} unitKey={unitKey} onPick={setProblem} onBack={() => setUnitKey(null)} />;
+  return <Board player={player} problem={problem} onExit={() => setProblem(null)} />;
+}
+
+// ── ① 単元えらび ──────────────────────────────────────
+function UnitPicker({ player, onPick, onBack }) {
+  return (
+    <div className="app">
+      <Header player={player} back="ホーム" onBack={onBack} />
+      <div className="content">
+        <div className="glass" style={{ padding: 16, marginTop: 10 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>🧑‍🏫 先生の説明を聞く</div>
+          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.6)", lineHeight: 1.6 }}>
+            先生が黒板を使って、1問ずつ順番に説明してくれます。とちゅうで確認クイズが出るよ。まちがえても大丈夫、
+            もう一度やさしく説明してくれます。
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {UNIT_FILES.map((u) => (
+            <button key={u.key} className="mode-card" onClick={() => onPick(u.key)}
+              style={{ background: `${u.color}1a`, borderColor: `${u.color}55`, alignItems: "flex-start", textAlign: "left", padding: 14 }}>
+              <span style={{ fontSize: 22 }}>{u.emoji}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, marginTop: 4 }}>{u.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ② 問題えらび（小単元でグループ化した一覧） ─────────────
+function ProblemPicker({ player, unitKey, onPick, onBack }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    UNIT_LOADERS[unitKey]().then((m) => { if (alive) setData(m.default || m); });
+    return () => { alive = false; };
+  }, [unitKey]);
+
+  if (!data) {
+    return (
+      <div className="app">
+        <Header player={player} back="単元えらび" onBack={onBack} />
+        <div className="content">
+          <div style={{ marginTop: 20, textAlign: "center", opacity: .6 }}>よみこみ中…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const groups = {};
+  for (const p of data.problems) {
+    (groups[p.subunit] ||= []).push(p);
+  }
+
+  return (
+    <div className="app">
+      <Header player={player} back="単元えらび" onBack={onBack} />
+      <div className="content">
+        <div style={{ fontSize: 15, fontWeight: 900, margin: "10px 0 4px" }}>{data.unit}</div>
+        <div style={{ fontSize: 11.5, opacity: .6, marginBottom: 10 }}>{data.count}問。小単元をえらんで、そこから1問えらぼう。</div>
+        {Object.entries(groups).map(([subunit, items]) => (
+          <details key={subunit} style={{ marginBottom: 8 }}>
+            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 800, padding: "8px 4px", color: "#c7d2fe" }}>
+              {subunit}（{items.length}問）
+            </summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+              {items.map((p) => (
+                <button key={p.id} onClick={() => onPick(p)} className="nb-btn"
+                  style={{ textAlign: "left", display: "flex", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.45)", whiteSpace: "nowrap" }}>{p.difficulty}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, display: "-webkit-box",
+                    WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.problem_text}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ③ 黒板＋先生（ノードグラフ再生） ───────────────────────
+function Board({ player, problem, onExit }) {
+  const tm = problem.teacher_mode;
+  const [state, setState] = useState(() => startTeacherMode(tm));
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [picked, setPicked] = useState(null); // check中に選んだ選択肢のindex（結果表示用）
+  const boardRef = useRef(null);
+  const canSpeak = speechAvailable();
+
+  const node = currentNode(tm, state);
+
+  useEffect(() => {
+    if (boardRef.current) boardRef.current.scrollTop = boardRef.current.scrollHeight;
+  }, [state.board.length]);
+
+  // 現在のノードのテキストを読み上げる
+  useEffect(() => {
+    if (!voiceOn || !node) return;
+    const text = node.type === "check" ? node.question : node.text;
+    speakText(text);
+    return () => stopSpeak();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.nodeId, voiceOn]);
+
+  const choose = (i) => {
+    if (picked != null) return;
+    setPicked(i);
+    setTimeout(() => { setState((s) => answerCheck(tm, s, i)); setPicked(null); }, 550);
+  };
+
+  const teacherFace = state.done ? "🎉" : (node?.type === "check") ? "🤔" : "🧑‍🏫";
+
+  return (
+    <div className="app">
+      <Header player={player} />
+      <div className="content" style={{ maxWidth: 880, display: "flex", flexDirection: "column", height: "calc(100dvh - 64px)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <button className="back-btn" onClick={onExit}>← 問題えらび</button>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 900, color: "#fef9c3",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            📌 {problem.problem_text}
+          </div>
+          {canSpeak && (
+            <button className="back-btn" onClick={() => setVoiceOn((v) => !v)} title="先生の声">
+              {voiceOn ? "🔊 声ON" : "🔇 声OFF"}
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
+          {/* 左：黒板 */}
+          <div ref={boardRef} style={{
+            flex: 1, minWidth: 0, overflowY: "auto",
+            background: "linear-gradient(160deg,#15352b,#0f2a22)",
+            border: "10px solid #6b4423", borderRadius: 12,
+            boxShadow: "inset 0 0 60px rgba(0,0,0,.5)", padding: "18px 20px",
+            fontFamily: "'Yu Kyokasho','Hiragino Maru Gothic ProN',sans-serif",
+          }}>
+            {state.board.map((ln, i) => (
+              <div key={i} style={{ marginBottom: 11, fontSize: 17, lineHeight: 1.5, letterSpacing: ".02em", ...LINE_STYLE[ln.kind], animation: "fadeUp .35s both" }}>
+                {ln.text}
+              </div>
+            ))}
+          </div>
+
+          {/* 右：先生（声で問いかける） */}
+          <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ textAlign: "center", fontSize: 64, lineHeight: 1, filter: "drop-shadow(0 4px 10px rgba(0,0,0,.4))" }}>{teacherFace}</div>
+            <div className="glass" style={{ flex: 1, padding: 13, fontSize: 13.5, lineHeight: 1.65, overflowY: "auto" }}>
+              <div style={{ fontSize: 10, fontWeight: 900, color: "#a5b4fc", marginBottom: 5 }}>先生</div>
+              {state.done ? (
+                "よくがんばったね！これでこの問題の説明はおしまい。"
+              ) : node?.type === "check" ? (
+                node.question
+              ) : (
+                node?.text
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          {state.done ? (
+            <button className="nb-btn" onClick={onExit} style={{ background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
+              🎉 おわり！ ほかの問題をえらぶ
+            </button>
+          ) : node?.type === "check" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {node.choices.map((c, i) => (
+                <button key={i} onClick={() => choose(i)} disabled={picked != null} className="nb-btn"
+                  style={{
+                    textAlign: "left", fontSize: 14, fontWeight: 700, padding: "12px 14px",
+                    borderColor: picked === i ? (i === node.correct ? "rgba(134,239,172,.7)" : "rgba(248,113,113,.7)") : undefined,
+                    background: picked === i ? (i === node.correct ? "rgba(134,239,172,.18)" : "rgba(248,113,113,.18)") : undefined,
+                  }}>
+                  {String.fromCharCode(65 + i)}. {c}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button className="nb-btn" onClick={() => setState((s) => advanceExplain(tm, s))}
+              style={{ width: "100%", background: "linear-gradient(135deg,#6366f1,#818cf8)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
+              次へ →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

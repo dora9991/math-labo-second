@@ -16,7 +16,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
   onChallenge, onRelearn, onUnitHaichi, onUnitPractice, onUnitBattle, onDiagnose,
-  onDetail, onCharacter,
+  onDetail, onCharacter, onTeacherMode,
 }) {
   const availGrades = gradesWithChapters();
   const [msg] = useState(() => voice("open"));
@@ -97,6 +97,21 @@ export default function Home({
         </button>
         {cycleOpen && (
           <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
+        )}
+
+        {/* 教師モード（黒板で先生の説明を聞く。学習サイクルとは独立の入口） */}
+        {onTeacherMode && (
+          <button data-sfx="none" onClick={onTeacherMode} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            margin: "0 0 8px", padding: "12px 14px", borderRadius: 13, cursor: "pointer", fontFamily: "inherit",
+            border: "1.5px solid rgba(167,139,250,.4)", background: "rgba(167,139,250,.10)", color: "#fff",
+          }}>
+            <span style={{ fontSize: 22 }}>🧑‍🏫</span>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>先生の説明を聞く</span>
+              <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .65 }}>黒板とお話で1問ずつ、ゆっくり教えてもらおう</span>
+            </span>
+          </button>
         )}
       </div>
     </div>

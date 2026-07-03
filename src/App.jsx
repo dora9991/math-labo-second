@@ -51,6 +51,7 @@ import { HERO_PRICE } from "./data/heroes.js";
 import HowTo from "./screens/HowTo.jsx";
 import Clinic from "./screens/Clinic.jsx";
 const DialogueLesson = lazy(() => import("./screens/DialogueLesson.jsx")); // 対話授業（試作）。questionBank等を開いた時だけ読む
+const TeacherMode = lazy(() => import("./screens/TeacherMode.jsx")); // 教師モード（誤答駆動ノードグラフ＋黒板＋TTS）。1139問ぶんのteacher_modeを再生
 import Collection from "./screens/Collection.jsx";
 import { findItem, treatCost } from "./engine/items.js";
 import { getPlayerBattleStats, BATTLE_SKILLS, battleBonuses, isCalcKingCleared, CALC_KING_CLEAR_STREAK, CALC_KING_CLEAR_CRYSTAL, findSkill, rollSkillGachaNew, SKILL_RARITY, SKILL_GACHA_COST_1 } from "./engine/battle.js";
@@ -1181,6 +1182,15 @@ export default function App() {
     );
   }
 
+  // 教師モード：仮想生徒の誤答から作った説明→確認クイズのノードグラフを黒板+TTSで再生
+  if (screen === "teacherMode") {
+    return (
+      <Suspense fallback={<div className="app"><div className="content"><div className="glass" style={{ padding: 20, textAlign: "center" }}>読み込み中…</div></div></div>}>
+        <TeacherMode player={data.player} onBack={() => setScreen("home")} />
+      </Suspense>
+    );
+  }
+
   if (screen === "chapter") {
     return (
       <ChapterSelect
@@ -1646,6 +1656,7 @@ export default function App() {
       onBattle={() => setScreen("battle")}
       onRelearn={() => setScreen("relearn")}
       onDialogue={() => setScreen("dialogue")}
+      onTeacherMode={() => setScreen("teacherMode")}
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}
       onDiagnose={(ch) => { setDiagnoseChapter(ch); setScreen("diagnose"); }}
