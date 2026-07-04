@@ -131,6 +131,10 @@ export default function App() {
   const [practiceUnit, setPracticeUnit] = useState(null); // 間違いノートの単元別じっくり練習で選んだ単元
   const [calcChapter, setCalcChapter] = useState(null); // 計算王への道で選んだ単元（章）
   const pendingMonsterRef = useRef(null); // レベルアップ演出の後に出すための保留枠
+  // #4 サイクル初クリア直後（有能感のピーク）に「応用の扉」を出すための保留枠。
+  //  レベルアップ演出のonDoneで消費する（levelUpTo/newMonsterと同じ「演出の順番待ち」流儀）。
+  const pendingApplyGateRef = useRef(null);
+  const [applyGate, setApplyGate] = useState(null); // { chapterId, chapterName, unitName }
 
   // player を更新して保存する共通関数
   function updatePlayer(updater) {
@@ -536,6 +540,12 @@ export default function App() {
       sfx.levelUp();
       // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
+      // #4 有能感のピーク（サイクル初クリア）に「応用の扉」を出す。レベルアップ演出の後に表示。
+      const clearedChapter = findChapterByUnitId(unitId);
+      const clearedUnit = findUnitById(unitId);
+      if (clearedChapter) {
+        pendingApplyGateRef.current = { chapterId: clearedChapter.id, chapterName: clearedChapter.name, unitName: clearedUnit?.name || "" };
+      }
     } else if (wasCleared) {
       // 既にクリア済みの単元を解き直した＝間隔反復の復習。1日後/1週間後の窓が開いていれば石を出す。
       maybeReviewBonus(unitId);
@@ -1808,12 +1818,30 @@ export default function App() {
           onDone={() => {
             setLevelUpTo(null);
             // レベルアップ演出のあとに、保留していた新モンスター通知を出す
-            if (pendingMonsterRef.current) {
+            const hadMonster = !!pendingMonsterRef.current;
+            if (hadMonster) {
               const m = pendingMonsterRef.current;
               pendingMonsterRef.current = null;
               setTimeout(() => setNewMonster(m), 250);
             }
+            // #4 保留していた「応用の扉」カードを出す（新モンスター通知の後・無ければすぐ）
+            if (pendingApplyGateRef.current) {
+              const g = pendingApplyGateRef.current;
+              pendingApplyGateRef.current = null;
+              setTimeout(() => setApplyGate(g), hadMonster ? 1400 : 600);
+            }
           }}
+        />
+      )}
+      {applyGate && (
+        <ApplyGateOverlay
+          info={applyGate}
+          onChallenge={() => {
+            const ch = findChapterById(applyGate.chapterId);
+            setApplyGate(null);
+            if (ch) { setCalcChapter(ch); setScreen("challenge"); }
+          }}
+          onSkip={() => setApplyGate(null)}
         />
       )}
       {loginBonus && (
@@ -1999,6 +2027,27 @@ function NaoshizumiToast({ info, onDone }) {
       <span style={{ fontSize: 18 }}>🔧✨</span>
       <span style={{ fontSize: 12.5, fontWeight: 900, color: "#7dd3fc" }}>なおしずみ！</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.65)" }}>「{info.unitName}」の苦手を倒した</span>
+    </div>
+  );
+}
+
+// #4 サイクル初クリア直後（有能感のピーク）に出す「応用の扉」カード。
+//  基礎ができた瞬間に、応用（計算王）への一歩を軽く誘う。強制ではなくスキップ可。
+function ApplyGateOverlay({ info, onChallenge, onSkip }) {
+  return (
+    <div onClick={onSkip} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div className="glass" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 320, padding: "26px 24px", textAlign: "center", border: "2px solid #a855f7", background: "#171536", animation: "rankUpPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#c4b5fd", letterSpacing: 2 }}>⚔️ 応用の扉がひらいた！</div>
+        <div style={{ fontSize: 50, margin: "10px 0" }}>🚪✨</div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#e9d5ff" }}>「{info.unitName}」の基礎クリア！</div>
+        <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.72)", margin: "8px 0 16px", lineHeight: 1.5 }}>
+          {info.chapterName}の計算王に挑戦してみよう。失敗してもペナルティはないよ。
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onSkip} data-sfx="back" style={{ flex: 1, padding: "12px", borderRadius: 11, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.06)", color: "#fff", fontWeight: 800, cursor: "pointer", fontSize: 13.5 }}>また今度</button>
+          <button onClick={onChallenge} data-sfx="none" style={{ flex: 1.4, padding: "12px", borderRadius: 11, border: "none", background: "linear-gradient(135deg,#a855f7,#8b5cf6)", color: "#fff", fontWeight: 900, cursor: "pointer", fontSize: 13.5 }}>⚔️ 挑戦する</button>
+        </div>
+      </div>
     </div>
   );
 }
