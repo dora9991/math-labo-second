@@ -118,10 +118,19 @@ export function removeMistake(id) {
   return data.mistakes;
 }
 
-/** 間違いノートから、その単元の問題をまとめて削除（学び直しで全問正解＝マスター時に使う） */
+/** 間違いノートから、その単元の問題をまとめて削除（翌日確認まで解けて＝完全になおった時に使う） */
 export function removeMistakesByUnit(unitId) {
   const data = readAll();
   data.mistakes = data.mistakes.filter((m) => m.unitId !== unitId);
+  writeAll(data);
+  return data.mistakes;
+}
+
+/** その単元の間違いを「仮なおし済み（pendingAt=日付）」にする。まだノートには残す（翌日確認まで）。
+ *  学び直しで連続正解して〈仮なおし〉になった時に使う。翌日以降に1問正解すれば removeMistakesByUnit で消える。 */
+export function markUnitRelearnPending(unitId, dateStr) {
+  const data = readAll();
+  data.mistakes = data.mistakes.map((m) => (m.unitId === unitId ? { ...m, pendingAt: dateStr } : m));
   writeAll(data);
   return data.mistakes;
 }

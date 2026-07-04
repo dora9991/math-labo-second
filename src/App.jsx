@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
-import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier } from "./engine/scoring.js";
+import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, makeChoices } from "./engine/generator.js";
 import { updateMastery, levelDifficulty, INITIAL_MASTERY } from "./engine/mastery.js";
 import * as bgm from "./audio/bgm.js";
@@ -115,7 +115,8 @@ export default function App() {
   const [skillGet, setSkillGet] = useState(null); // スキル入手演出（章ボス撃破）
   const [crystalGet, setCrystalGet] = useState(null); // クリスタル入手演出 { amount }
   const [gearStoneGet, setGearStoneGet] = useState(null); // 剣石・鎧石の入手演出（応用クリア）
-  const [relearnMastered, setRelearnMastered] = useState(null); // 学び直しマスター演出 { unitName, count, reward }
+  const [relearnMastered, setRelearnMastered] = useState(null); // 学び直し完全クリア演出（翌日確認）{ unitName, count, reward }
+  const [relearnPended, setRelearnPended] = useState(null); // 〈仮なおし〉演出（その場2連続正解）{ unitName, count }
   const [recruitResult, setRecruitResult] = useState(null); // 仲間チャレンジの結果演出 { ok, name }
   const baitUsedRef = useRef(null); // 今のバトルで「魔物のエサ」を使った敵のid
   const [calcKingClear, setCalcKingClear] = useState(null); // 計算王クリア演出（バトル攻撃力アップ）
@@ -405,18 +406,62 @@ export default function App() {
     return MISTAKE_FIX_REWARD;
   }
 
-  // 学び直しマスター：その単元の学び直し練習で全問正解したら、その単元の間違いをまとめて消す。
-  //  （手動の「消す」ボタンは廃止＝勉強せずに消す抜け道を防ぐ。実際に解けて初めて消える。）
-  function masterRelearnUnit(unit) {
+  // ── 学び直しの合格基準（2段階：その場＝2連続 → 翌日以降＝1問で確定）──
+  //  旧「単元5問ぜんぶ正解で即消し」を廃止。基準は engine/scoring.js に集約。
+  //   段階：fresh（まだ）→ pendingToday（今日〈仮なおし〉・確認は明日）→ confirm（翌日以降・あと1問で消える）
+  const relearnStreakRef = useRef(0); // 学び直し中の連続正解数（不正解でリセット）
+
+  /** その単元の学び直しの段階を、間違いの pendingAt から判定する。 */
+  function relearnPhase(unitId) {
+    const ms = (data.mistakes || []).filter((m) => m.unitId === unitId);
+    if (!ms.length) return "none";
+    const pend = ms.find((m) => m.pendingAt);
+    if (!pend) return "fresh";
+    return pend.pendingAt === todayStr() ? "pendingToday" : "confirm";
+  }
+
+  // その場（同じ日）：変種で2連続正解 → その単元を〈仮なおし〉に。ノートはまだ消さず「⏳あした確認」へ。
+  function pendUnitRelearn(unit) {
     if (!unit?.id) return;
-    const removed = (data.mistakes || []).filter((m) => m.unitId === unit.id);
-    if (!removed.length) return; // もう間違いが無ければ何もしない
-    const reward = removed.length * MISTAKE_FIX_REWARD;
-    const mistakes = store.removeMistakesByUnit(unit.id);
-    updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + reward }));
+    const count = (data.mistakes || []).filter((m) => m.unitId === unit.id).length;
+    if (!count) return;
+    const mistakes = store.markUnitRelearnPending(unit.id, todayStr());
     setData((d) => ({ ...d, mistakes }));
     sfx.levelUp();
-    setTimeout(() => setRelearnMastered({ unitName: unit.name, count: removed.length, reward }), 400);
+    setTimeout(() => setRelearnPended({ unitName: unit.name, count }), 350);
+  }
+
+  // 翌日以降：変種で1問正解 → 〈完全になおった〉＝その単元の間違いをまとめて消す＋ごほうび。
+  function confirmRelearnUnit(unit) {
+    if (!unit?.id) return;
+    const removed = (data.mistakes || []).filter((m) => m.unitId === unit.id);
+    if (!removed.length) return;
+    const mistakes = store.removeMistakesByUnit(unit.id);
+    updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + RELEARN_CONFIRM_COIN }));
+    setData((d) => ({ ...d, mistakes }));
+    sfx.levelUp();
+    setTimeout(() => setRelearnMastered({ unitName: unit.name, count: removed.length, reward: RELEARN_CONFIRM_COIN }), 350);
+  }
+
+  // 学び直し練習の1問ごと：採点/XP/コイン/サイクルなおす加算は従来どおり recordStepAttempt に通し、
+  //  そのうえで2段階の合格基準（仮なおし／翌日確認）を進める。
+  function handleRelearnAttempt(a) {
+    recordStepAttempt({ ...a, relearn: true });
+    const unitId = a.unitId;
+    if (!unitId) return;
+    const unit = practiceUnit && practiceUnit.id === unitId ? practiceUnit : findUnitById(unitId);
+    const phase = relearnPhase(unitId);
+    if (phase === "confirm") {
+      // 翌日以降の確認：1問でも正解できたら完全クリア
+      if (a.ok) { relearnStreakRef.current = 0; confirmRelearnUnit(unit); }
+      return;
+    }
+    // その場（fresh）：連続正解を数え、2連続で〈仮なおし〉。pendingToday は当日中これ以上進めない。
+    relearnStreakRef.current = a.ok ? relearnStreakRef.current + 1 : 0;
+    if (phase === "fresh" && a.ok && relearnStreakRef.current >= RELEARN_STREAK_TARGET) {
+      relearnStreakRef.current = 0;
+      pendUnitRelearn(unit);
+    }
   }
 
   // バトルで間違えた問題を「学び直しモード」に記録（同じ問題文は重複させない・最大40件）
@@ -1340,7 +1385,7 @@ export default function App() {
         onHaichi={() => openHaichiStudio(sel.unit, "timeAttack")}
         weakUnits={getWeakUnits(data.player, data.mistakes, data.records)}
         onWeakStart={startWeakTA}
-        onRelearn={(unit) => { setPracticeUnit(unit); setScreen("relearnPractice"); }}
+        onRelearn={(unit) => { relearnStreakRef.current = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onOpenRelearnList={() => setScreen("relearn")}
       />
     );
@@ -1421,7 +1466,7 @@ export default function App() {
       <Relearn
         player={data.player}
         mistakes={data.mistakes}
-        onRelearn={(unit) => { setPracticeUnit(unit); setScreen("relearnPractice"); }}
+        onRelearn={(unit) => { relearnStreakRef.current = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onHaichi={(unit) => openHaichiStudio(unit, "relearn")}
         onRemove={removeNote}
         onBack={() => setScreen("home")}
@@ -1431,16 +1476,17 @@ export default function App() {
 
   // 学び直しの練習（時間制限なし・1問15XP＝1.5倍・15問ごとに💎+1・StepUpSimpleを流用）
   if (screen === "relearnPractice" && practiceUnit) {
+    const rlPhase = relearnPhase(practiceUnit.id);
+    // 翌日確認（confirm）は「あと1問」なので短く、その場（fresh）は2連続正解を狙うので少し長め。
+    const rlRound = rlPhase === "confirm" ? 3 : 6;
     return (
       <StepUpSimple
         key={"relearn-" + practiceUnit.id}
         player={data.player}
         units={[practiceUnit]}
         title={`学び直し：${practiceUnit.name}`}
-        roundSize={5}
-        passRate={100}
-        onAttempt={(a) => recordStepAttempt({ ...a, relearn: true })}
-        onRoundEnd={({ correct, seen }) => { if (seen >= 5 && correct >= seen) masterRelearnUnit(practiceUnit); }}
+        roundSize={rlRound}
+        onAttempt={handleRelearnAttempt}
         onHome={() => setScreen("relearn")}
       />
     );
@@ -1522,7 +1568,7 @@ export default function App() {
         onAttempt={recordStepAttempt}
         onHome={() => setScreen("calcPick")}
         weakUnits={getWeakUnits(data.player, data.mistakes, data.records)}
-        onRelearn={(unit) => { setPracticeUnit(unit); setScreen("relearnPractice"); }}
+        onRelearn={(unit) => { relearnStreakRef.current = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onHaichi={(unit) => openHaichiStudio(unit, "calcPractice")}
         onOpenRelearnList={() => setScreen("relearn")}
       />
@@ -1554,7 +1600,7 @@ export default function App() {
         onAttempt={recordStepAttempt}
         onHome={() => setScreen("home")}
         weakUnits={getWeakUnits(data.player, data.mistakes, data.records)}
-        onRelearn={(unit) => { setPracticeUnit(unit); setScreen("relearnPractice"); }}
+        onRelearn={(unit) => { relearnStreakRef.current = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onHaichi={(unit) => openHaichiStudio(unit, "stepUp")}
         onOpenRelearnList={() => setScreen("relearn")}
       />
@@ -1623,7 +1669,7 @@ export default function App() {
         onComplete={saveUnitTestResult}
         onBack={() => setUtChapter(null)}
         weakUnits={getWeakUnits(data.player, data.mistakes, data.records)}
-        onRelearn={(unit) => { setPracticeUnit(unit); setScreen("relearnPractice"); }}
+        onRelearn={(unit) => { relearnStreakRef.current = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onHaichi={(unit) => openHaichiStudio(unit, "unitTest")}
         onOpenRelearnList={() => setScreen("relearn")}
       />
@@ -1715,6 +1761,7 @@ export default function App() {
       {crystalGet && <CrystalGetOverlay amount={crystalGet.amount} onDone={() => setCrystalGet(null)} />}
       {gearStoneGet && <GearStoneGetOverlay sword={gearStoneGet.sword} armor={gearStoneGet.armor} reason={gearStoneGet.reason} onDone={() => setGearStoneGet(null)} />}
       {relearnMastered && <RelearnMasteredOverlay info={relearnMastered} onDone={() => setRelearnMastered(null)} />}
+      {relearnPended && <RelearnPendedOverlay info={relearnPended} onDone={() => setRelearnPended(null)} />}
       {recruitResult && <RecruitResultOverlay result={recruitResult} onDone={() => setRecruitResult(null)} />}
       {calcKingClear && (
         <CalcKingClearOverlay
@@ -1836,11 +1883,28 @@ function RelearnMasteredOverlay({ info, onDone }) {
   return (
     <div onClick={onDone} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div className="glass" style={{ maxWidth: 320, padding: "26px 24px", textAlign: "center", border: "2px solid #4ade80", background: "#171536", animation: "rankUpPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", letterSpacing: 2 }}>🎓 学び直しマスター！</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", letterSpacing: 2 }}>🎓 カンペキになおった！</div>
         <div style={{ fontSize: 50, margin: "10px 0" }}>📖✨</div>
         <div style={{ fontSize: 18, fontWeight: 900, color: "#86efac" }}>{info.unitName}</div>
         <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", margin: "8px 0 4px", lineHeight: 1.5 }}>
-          5問ぜんぶ正解！この単元のまちがい{info.count}問をノートから消したよ。💰+{info.reward}
+          日をまたいでも解けた！ほんとうに身についたね。まちがい{info.count}問をノートから消したよ。💰+{info.reward}
+        </div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
+      </div>
+    </div>
+  );
+}
+
+// 〈仮なおし〉演出：その場で2連続正解して「なおすOK」が立った瞬間。まだノートには残し、確認は翌日。
+function RelearnPendedOverlay({ info, onDone }) {
+  return (
+    <div onClick={onDone} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div className="glass" style={{ maxWidth: 320, padding: "26px 24px", textAlign: "center", border: "2px solid #38bdf8", background: "#171536", animation: "rankUpPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", letterSpacing: 2 }}>✅ なおせた！（あと1歩）</div>
+        <div style={{ fontSize: 50, margin: "10px 0" }}>🔧✨</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "#7dd3fc" }}>{info.unitName}</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", margin: "8px 0 4px", lineHeight: 1.5 }}>
+          2回れんぞく正解！この単元の「なおす」はクリア。<br /><b style={{ color: "#fde047" }}>⏳ あした、もう1問といたらカンペキ</b>だよ。
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 12 }}>タップで閉じる</div>
       </div>

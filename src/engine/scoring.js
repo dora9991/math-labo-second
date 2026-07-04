@@ -132,6 +132,19 @@ export const XP_PENALTY_PER_WRONG = 3;
 export const RELEARN_XP_PER_CORRECT = 15;
 export const RELEARN_CRYSTAL_EVERY = 15;
 
+// ── 学び直しの合格基準（2段階：その場＝2連続 → 翌日以降＝1問で確定）──
+// 旧「単元5問ぜんぶ正解で即消し」を廃止。理由：1ミスで4問ぶんの成果が消える罰性、
+// かつ直後にまとめて解くのは短期記憶で通ってしまい定着の錯覚（massed practice）になる。
+// 新基準：
+//   (1) その場（同じ日）… 変種で RELEARN_STREAK_TARGET 問「連続正解」で〈仮なおし〉。
+//        サイクルの「なおすOK」はここで立つ（進行を翌日待ちでブロックしない）。
+//        ただしノートからはまだ消さず「⏳あした確認」にする。
+//   (2) 翌日以降 … 変種で RELEARN_CONFIRM_CORRECT 問正解すれば〈完全になおった〉＝ノートから消える。
+//        日をまたいで解けること＝保持の確認（分散効果）。失敗しても仮状態に戻すだけ（罰なし）。
+export const RELEARN_STREAK_TARGET = 2;    // その場の〈仮なおし〉に必要な連続正解数
+export const RELEARN_CONFIRM_CORRECT = 1;  // 翌日以降の確認で完全クリアに必要な正解数
+export const RELEARN_CONFIRM_COIN = 8;     // 翌日確認で完全になおしたときのごほうびコイン
+
 // ── 背骨(StepUp/弱点克服)・学び直しを「報酬のある学習」にする（王道サイクルの要）──
 // 設計メモ§8/§10 Step1：背骨と丁寧な学習が“割に合わない”状態を是正。正解ごとに少額コインを付与
 //  （グラインドTA=3/正解と同等にして、速さで稼ぐより損しないように）。

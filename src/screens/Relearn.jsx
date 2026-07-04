@@ -17,7 +17,16 @@ import { hasHaichiLessonForUnit } from "../data/haichiCourse.js";
 
 const GRADE_LABEL = { 1: "中1", 2: "中2", 3: "中3" };
 
+// その単元の学び直しの段階を、間違いの pendingAt から判定（App.jsx の relearnPhase と同じ規則）。
+//  fresh=まだ / pendingToday=今日〈仮なおし〉・確認は明日 / confirm=翌日以降・あと1問でカンペキ
+function phaseOf(list, today) {
+  const pend = list.find((m) => m.pendingAt);
+  if (!pend) return "fresh";
+  return pend.pendingAt === today ? "pendingToday" : "confirm";
+}
+
 export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, onBack }) {
+  const today = new Date().toLocaleDateString("ja-JP");
   // 間違いを単元ごとにまとめる（単元が分からないものは「その他」へ）
   const groups = {};
   for (const m of mistakes) {
@@ -31,7 +40,7 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
       <Header player={player} back="ホーム" onBack={onBack} />
       <div className="content">
         <div className="pg-ttl">📖 学び直しモード</div>
-        <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。学び直しで<b style={{ color: "#86efac" }}>5問ぜんぶ正解</b>すると、その単元はノートから自動で消えるよ（1問 +15XP）。</div>
+        <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。<b style={{ color: "#7dd3fc" }}>2回れんぞく正解</b>でなおせて、<b style={{ color: "#86efac" }}>つぎの日にもう1問</b>とけたらカンペキ（ノートから消える）。1問 +15XP。</div>
 
         {mistakes.length === 0 ? (
           <div className="glass">
@@ -47,6 +56,12 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
             const vurl = unit ? videoUrlFor(key) : null;
             const color = chap?.color || "#94a3b8";
             const list = groups[key];
+            const phase = phaseOf(list, today);
+            // 段階ごとのボタン見た目・文言（fresh=なおす / confirm=あと1問 / pendingToday=あした確認）
+            const btn = {
+              fresh:   { bg: "linear-gradient(135deg,#0ea5e9,#6366f1)", main: "✏️ この単元を学び直す", sub: "2回れんぞく正解でなおせる" },
+              confirm: { bg: "linear-gradient(135deg,#22c55e,#10b981)", main: "🔄 あと1問でカンペキ！", sub: "きのうなおした所を確認しよう" },
+            }[phase];
             return (
               <div key={key} className="glass" style={{ padding: "12px 13px", marginBottom: 12, borderLeft: `4px solid ${color}` }}>
                 {/* 単元ヘッダー */}
@@ -60,17 +75,26 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
                       {GRADE_LABEL[chap.grade] || ""} ・ {chap.name}
                     </span>
                   )}
+                  {phase === "pendingToday" && (
+                    <span style={{ fontSize: 10, fontWeight: 900, color: "#fde047", background: "rgba(56,189,248,.15)", border: "1px solid rgba(56,189,248,.5)", borderRadius: 999, padding: "2px 8px" }}>⏳ あした確認</span>
+                  )}
                   <span style={{ marginLeft: "auto", fontSize: 11, color: "rgba(255,255,255,.5)" }}>{list.length}問</span>
                 </div>
 
                 {/* アクション：学び直し ＋ 解説動画 */}
                 <div style={{ display: "flex", gap: 7, margin: "9px 0 4px" }}>
-                  {unit && onRelearn && (
+                  {unit && onRelearn && phase !== "pendingToday" && (
                     <button data-sfx="none" onClick={() => onRelearn(unit)}
                       style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: "none", cursor: "pointer",
-                        fontSize: 13, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", lineHeight: 1.3 }}>
-                      ✏️ この単元を学び直す<br /><span style={{ fontSize: 10, fontWeight: 700, opacity: .85 }}>5問ぜんぶ正解で消える</span>
+                        fontSize: 13, fontWeight: 900, color: "#fff", background: btn.bg, lineHeight: 1.3 }}>
+                      {btn.main}<br /><span style={{ fontSize: 10, fontWeight: 700, opacity: .85 }}>{btn.sub}</span>
                     </button>
+                  )}
+                  {unit && phase === "pendingToday" && (
+                    <div style={{ flex: 1, padding: "9px 8px", borderRadius: 10, textAlign: "center",
+                      fontSize: 12.5, fontWeight: 800, color: "#7dd3fc", background: "rgba(56,189,248,.1)", border: "1px dashed rgba(56,189,248,.45)", lineHeight: 1.35 }}>
+                      ✅ 今日はなおせた！<br /><span style={{ fontSize: 10, fontWeight: 700, opacity: .85 }}>あした もう1問でカンペキ</span>
+                    </div>
                   )}
                   {unit && onHaichi && hasHaichiLessonForUnit(key) ? (
                     <button data-sfx="none" onClick={() => onHaichi(unit)} title="葉一さんの動画＋プリントに書き込み"
