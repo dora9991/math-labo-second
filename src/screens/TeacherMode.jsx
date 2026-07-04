@@ -11,16 +11,38 @@ import { useState, useEffect, useRef } from "react";
 import Header from "../components/Header.jsx";
 import { speakText, stopSpeak, speechAvailable } from "../engine/reading.js";
 import { startTeacherMode, advanceExplain, answerCheck, currentNode } from "../data/dialogue/teacherModeEngine.js";
+import { findChapterById } from "../data/index.js";
 
 const UNIT_FILES = [
-  { key: "seifu", label: "正の数・負の数", emoji: "➕", color: "#818cf8" },
-  { key: "moji", label: "文字の式", emoji: "🔤", color: "#f472b6" },
-  { key: "eq", label: "方程式", emoji: "⚖️", color: "#fbbf24" },
-  { key: "pr", label: "比例と反比例", emoji: "📈", color: "#34d399" },
-  { key: "pl", label: "平面図形", emoji: "🔺", color: "#60a5fa" },
-  { key: "sp", label: "空間図形", emoji: "🧊", color: "#a78bfa" },
-  { key: "dt", label: "データの活用", emoji: "📊", color: "#fb7185" },
+  { key: "seifu", label: "正の数・負の数", emoji: "➕", color: "#818cf8", chapterId: "c1" },
+  { key: "moji", label: "文字の式", emoji: "🔤", color: "#f472b6", chapterId: "c2" },
+  { key: "eq", label: "方程式", emoji: "⚖️", color: "#fbbf24", chapterId: "c3" },
+  { key: "pr", label: "比例と反比例", emoji: "📈", color: "#34d399", chapterId: "c4" },
+  { key: "pl", label: "平面図形", emoji: "🔺", color: "#60a5fa", chapterId: "c5" },
+  { key: "sp", label: "空間図形", emoji: "🧊", color: "#a78bfa", chapterId: "c6" },
+  { key: "dt", label: "データの活用", emoji: "📊", color: "#fb7185", chapterId: "c7" },
 ];
+
+// P0の小単元名(subunit)とアプリの単元(unitId)の対応表は7単元ぶん個別に持たず、
+//  名前の部分一致で解決する（完全一致→2文字フラグメント一致の順）。厳密な1:1では
+//  ないため、確信が持てない場合は null を返し、無理に間違ったunitIdへ登録しない。
+function resolveUnitId(chapterId, subunit) {
+  const chapter = findChapterById(chapterId);
+  if (!chapter || !subunit) return null;
+  const units = chapter.units || [];
+  const clean = (s) => s.replace(/[（(].*?[）)]/g, "").trim();
+  for (const u of units) {
+    const name = clean(u.name);
+    if (name && (subunit.includes(name) || name.includes(subunit))) return u.id;
+  }
+  for (const u of units) {
+    const name = clean(u.name);
+    for (let i = 0; i + 2 <= name.length; i++) {
+      if (subunit.includes(name.slice(i, i + 2))) return u.id;
+    }
+  }
+  return null;
+}
 
 // 単元データは選んだときだけ読み込む（1139問ぶんを最初から全部読まない）
 const UNIT_LOADERS = {
@@ -41,13 +63,14 @@ const LINE_STYLE = {
   result: { color: "#86efac", fontWeight: 900, fontSize: 19 },
 };
 
-export default function TeacherMode({ player, onBack }) {
+export default function TeacherMode({ player, onBack, onMistake }) {
   const [unitKey, setUnitKey] = useState(null);
   const [problem, setProblem] = useState(null);
 
   if (!unitKey) return <UnitPicker player={player} onPick={setUnitKey} onBack={onBack} />;
   if (!problem) return <ProblemPicker player={player} unitKey={unitKey} onPick={setProblem} onBack={() => setUnitKey(null)} />;
-  return <Board player={player} problem={problem} onExit={() => setProblem(null)} />;
+  const chapterId = UNIT_FILES.find((u) => u.key === unitKey)?.chapterId || null;
+  return <Board player={player} problem={problem} chapterId={chapterId} onMistake={onMistake} onExit={() => setProblem(null)} />;
 }
 
 // ── ① 単元えらび ──────────────────────────────────────
@@ -132,7 +155,7 @@ function ProblemPicker({ player, unitKey, onPick, onBack }) {
 }
 
 // ── ③ 黒板＋先生（ノードグラフ再生） ───────────────────────
-function Board({ player, problem, onExit }) {
+function Board({ player, problem, chapterId, onMistake, onExit }) {
   const tm = problem.teacher_mode;
   const [state, setState] = useState(() => startTeacherMode(tm));
   const [voiceOn, setVoiceOn] = useState(true);
@@ -158,6 +181,12 @@ function Board({ player, problem, onExit }) {
   const choose = (i) => {
     if (picked != null) return;
     setPicked(i);
+    // これが2回目の誤答（＝この直後 forcedPass で先へ進む）なら、学び直しノートへ登録する。
+    //  「授業で間違えた→なおすに出る」を繋ぐ。unitIdはsubunit名からの近似解決（resolveUnitId）。
+    if (node?.type === "check" && i !== node.correct && (state.wrongCounts?.[node.id] || 0) >= 1) {
+      const unitId = resolveUnitId(chapterId, problem.subunit);
+      onMistake?.({ q: node.question, ans: String(node.choices[node.correct]), unitId, chapterId });
+    }
     setTimeout(() => { setState((s) => answerCheck(tm, s, i)); setPicked(null); }, 550);
   };
 

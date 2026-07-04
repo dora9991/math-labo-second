@@ -37,7 +37,7 @@ export function startTeacherMode(teacherMode) {
   const board = [];
   const line = boardLineFor(first, "work");
   if (line) board.push(line);
-  return { nodeId: teacherMode?.start, board, done: false, lastCorrect: null };
+  return { nodeId: teacherMode?.start, board, done: false, lastCorrect: null, wrongCounts: {} };
 }
 
 // explain ノードで「次へ」を押したとき（next="end" なら終了）
@@ -52,18 +52,38 @@ export function advanceExplain(teacherMode, state) {
   return { ...state, nodeId: node.next, board };
 }
 
-// check ノードで選択肢(index)を選んだとき
+// check ノードで選択肢(index)を選んだとき。
+//  同じcheckノードで2回目の誤答をすると、無限ループ（誤答→再説明→同じcheck…）で
+//  心が折れないよう、正解と理由を板書に見せてから先（onCorrect）へ進める。
+//  戻り値の forcedPass=true は「この問題は理解できずに進んだ＝学び直しノートへ」の合図。
 export function answerCheck(teacherMode, state, choiceIndex) {
   const node = currentNode(teacherMode, state);
   if (!node || node.type !== "check") return state;
   const correct = choiceIndex === node.correct;
-  const targetId = correct ? node.onCorrect : node.onWrong;
+  const wrongCounts = { ...(state.wrongCounts || {}) };
   const board = [...state.board, { text: String(node.choices[choiceIndex]), kind: "student" }];
+
+  if (!correct) {
+    wrongCounts[node.id] = (wrongCounts[node.id] || 0) + 1;
+    if (wrongCounts[node.id] >= 2) {
+      board.push({ text: `正解は「${node.choices[node.correct]}」だよ。`, kind: "result" });
+      const targetId = node.onCorrect;
+      if (!targetId || targetId === "end") {
+        return { ...state, done: true, lastCorrect: false, board, wrongCounts, forcedPass: true };
+      }
+      const next = findNode(teacherMode, targetId);
+      const line = boardLineFor(next, "work");
+      if (line) board.push(line);
+      return { ...state, nodeId: targetId, board, lastCorrect: false, wrongCounts, forcedPass: true };
+    }
+  }
+
+  const targetId = correct ? node.onCorrect : node.onWrong;
   if (!targetId || targetId === "end") {
-    return { ...state, done: true, lastCorrect: correct, board };
+    return { ...state, done: true, lastCorrect: correct, board, wrongCounts };
   }
   const next = findNode(teacherMode, targetId);
   const line = boardLineFor(next, correct ? "result" : "work");
   if (line) board.push(line);
-  return { ...state, nodeId: targetId, board, lastCorrect: correct };
+  return { ...state, nodeId: targetId, board, lastCorrect: correct, wrongCounts };
 }

@@ -1299,7 +1299,7 @@ export default function App() {
   if (screen === "teacherMode") {
     return (
       <Suspense fallback={<div className="app"><div className="content"><div className="glass" style={{ padding: 20, textAlign: "center" }}>読み込み中…</div></div></div>}>
-        <TeacherMode player={data.player} onBack={() => setScreen("home")} />
+        <TeacherMode player={data.player} onBack={() => setScreen("home")} onMistake={recordWrongAnswer} />
       </Suspense>
     );
   }
