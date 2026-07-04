@@ -101,15 +101,6 @@ export function ratchetSkillStats(skillStats = {}, results = [], today = "") {
   return ss;
 }
 
-/** 学び直しへの追加判定：同じ小単元で「2回連続まちがえた」時だけ true。
- *  streakMap を破壊的に更新（正解で0リセット／不正解で+1）＝入りすぎ防止の一元ルール。 */
-export function shouldAddMistake(streakMap, unitId, ok) {
-  if (!unitId) return false;
-  if (ok) { streakMap[unitId] = 0; return false; }
-  streakMap[unitId] = (streakMap[unitId] || 0) + 1;
-  return streakMap[unitId] === 2;
-}
-
 // ============================================================
 // 難易度ナビ（れんしゅう／バトル中の自動レベル調整）— §④
 //  「普通」から始まり、

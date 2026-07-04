@@ -227,7 +227,14 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
     let mode = null; // "max"（鬼級）/ "advanced"（発展）/ null
     if (fm && fm.turns > 0) { mode = "max"; forceMaxRef.current = fm.turns - 1 > 0 ? { ...fm, turns: fm.turns - 1 } : null; }
     else if (fh && fh.turns > 0) { mode = "advanced"; forceHardRef.current = fh.turns - 1 > 0 ? { ...fh, turns: fh.turns - 1 } : null; }
-    setQ((cur) => (problemSource ? problemSource(cur?.id) : mode === "max" ? genHardProblem(monster, cur?.id) : genBattleProblem(monster, cur?.id, mode)));
+    // 敵の「難問化/超難問」効果(mode)は、problemSource(適応出題/誤答束混入)より優先する
+    //  （#2でproblemSourceを通常バトルにも接続したため、mode強制中はそれを一時的に上書きする必要がある）。
+    setQ((cur) => (
+      mode === "max" ? genHardProblem(monster, cur?.id)
+      : mode === "advanced" ? genBattleProblem(monster, cur?.id, mode)
+      : problemSource ? problemSource(cur?.id)
+      : genBattleProblem(monster, cur?.id, mode)
+    ));
     setInput("");
     setLocked(false); lockedRef.current = false;
     // 制限時間：時間バフ（しゅうちゅう等）で伸ばし、敵デバフ（時間どろぼう等）で縮める
