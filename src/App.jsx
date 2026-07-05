@@ -36,6 +36,7 @@ import Notebook from "./screens/Notebook.jsx";
 import Relearn from "./screens/Relearn.jsx";
 import BattleSelect from "./screens/BattleSelect.jsx";
 import Battle from "./screens/Battle.jsx";
+import TurnBattle from "./screens/TurnBattle.jsx";
 import UnitTestSelect from "./screens/UnitTestSelect.jsx";
 import UnitTest from "./screens/UnitTest.jsx";
 import StepUp from "./screens/StepUp.jsx";
@@ -1724,12 +1725,35 @@ export default function App() {
         />
       );
     }
+    // 正の数・負の数(c1)のモンスターは「行動選択型バトル(v2)」で試作。他は従来バトル。
+    const maxHearts = Math.min(13, 5 + new Set((data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win" && /^boss_/.test(r.extra?.monsterId || "")).map((r) => r.extra.monsterId)).size);
+    const useTurnBattle = battleMonster && (battleMonster.grade ?? 1) === 1 && battleMonster.chapterId === "c1";
+    if (useTurnBattle) {
+      return (
+        <TurnBattle
+          key={battleKey}
+          player={data.player}
+          monster={battleMonster}
+          maxHearts={maxHearts}
+          problemSource={battlePractice ? battleProblemSource(battlePractice) : generalBattleProblemSource(battleMonster)}
+          onAttempt={battlePractice ? recordBattlePracticeAttempt : recordBattleGeneralAttempt}
+          onResult={handleBattleResult}
+          onSpChange={(sp) => updatePlayer((p) => ({ ...p, sp }))}
+          onHpChange={(hp) => updatePlayer((p) => ({ ...p, currentHp: hp }))}
+          onMistake={recordWrongAnswer}
+          onExit={() => {
+            if (battlePractice) { setBattlePractice(null); setBattleMonster(null); setScreen("home"); }
+            else setBattleMonster(null);
+          }}
+        />
+      );
+    }
     return (
       <Battle
         key={battleKey}
         player={data.player}
         monster={battleMonster}
-        maxHearts={Math.min(13, 5 + new Set((data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win" && /^boss_/.test(r.extra?.monsterId || "")).map((r) => r.extra.monsterId)).size)}
+        maxHearts={maxHearts}
         problemSource={battlePractice ? battleProblemSource(battlePractice) : generalBattleProblemSource(battleMonster)}
         onAttempt={battlePractice ? recordBattlePracticeAttempt : recordBattleGeneralAttempt}
         ally={(() => {
