@@ -231,6 +231,13 @@ export function slowXp({ streak, correct }) {
   return Math.max(1, Math.round((streak * 12 + correct * 6) / 5));
 }
 
+// れんしゅうの「1問正解あたりの獲得ポイント」。難易度が高いほど貯まりやすい
+//  （発展 > 標準 > 簡単）＝むずかしいのに挑戦するほど早くレベルアップできる設計。
+export const SLOW_POINTS_BY_LEVEL = { easy: 2, standard: 3, advanced: 5, oni: 7 };
+export function slowPointsForLevel(level) {
+  return SLOW_POINTS_BY_LEVEL[level] ?? 3;
+}
+
 /** 単元テストのXP（1問10XP、満点ボーナス30） */
 export function unitTestXp({ correct, total }) {
   return correct * 10 + (total > 0 && correct === total ? 30 : 0);

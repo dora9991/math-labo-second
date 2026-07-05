@@ -112,6 +112,8 @@ export function initialPlayerState(studentId) {
     readAloud: false,  // ★5 問題文を自動で読み上げる（読むのが苦手な人向け・既定OFF）
     furigana: false,   // ★5 数学用語にふりがなを付ける（既定OFF）
     unitMastery: {},   // { unitId: { pt:0〜100, streak:連続正解数, ok:bool } } 小単元の習得確認（4連続正解でOK）
+    navLevel: {},      // { unitId: "advanced" } れんしゅうの到達難易度。5問区切りをまたいで引き継ぐ
+    tagWrong: {},      // { skillTag: 累計まちがい数 } 同じタグで2問まちがえたら学び直しへ（出したら0に戻す）
     partners: {},      // なかま（エサで仲間にしたモンスター）{ monsterId: { lv } }。コイン/クリスタルで育成
     party: [],         // ストック（編成）monsterId配列・最大4体。先頭(activePartner)だけバトル参戦
     activePartner: null, // バトルに参戦する仲間1体のmonsterId（party内の1体）
@@ -152,6 +154,8 @@ export function normalizePlayerState(p) {
     : { owned: {}, weapon: null, armor: null };
   out.seenMonsters = p.seenMonsters || {};
   out.unitMastery = p.unitMastery || {};
+  out.navLevel = (p.navLevel && typeof p.navLevel === "object") ? p.navLevel : {};
+  out.tagWrong = (p.tagWrong && typeof p.tagWrong === "object") ? p.tagWrong : {};
   out.readAloud = !!p.readAloud; // ★5 設定（既定OFF）
   out.furigana = !!p.furigana;   // ★5 設定（既定OFF）
   out.crystals = Number.isFinite(p.crystals) ? p.crystals : 0;

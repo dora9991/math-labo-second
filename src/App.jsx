@@ -348,12 +348,29 @@ export default function App() {
       }
       return next;
     });
-    // 間違いを学び直しノートへ。入りすぎ防止＝「同じ小単元で2回以上まちがえた」単元だけ、代表1件。
-    const wrongByUnit = {};
-    for (const r of (results || [])) { const uid = r.unitId || unit.id; (wrongByUnit[uid] = wrongByUnit[uid] || []).push(r); }
-    const mistakes = Object.values(wrongByUnit).filter((arr) => arr.length >= 2).map((arr) =>
-      makeMistake({ studentId: sid, chapterId: chapter.id, unitId: arr[0].unitId || unit.id, level: arr[0].level || level, q: arr[0].q, ans: arr[0].ans })
-    );
+    // 間違いを学び直しノートへ：同じ「タグ(スキル)」で累計2問まちがえたら、その代表1件を出す。
+    //  タグ別カウンタ(player.tagWrong)を持ち越し、2に達したら学び直しへ送ってカウンタを0に戻す。
+    //  スキルタグが無い誤答は、この回のなかで同じ小単元2件でフォールバック。
+    const wrongs = (results || []).filter((r) => !r.ok);
+    const tw = { ...(data.player.tagWrong || {}) };
+    const unitCount = {};
+    const toAdd = [];
+    for (const r of wrongs) {
+      const tag = r.skill;
+      if (tag) {
+        tw[tag] = (tw[tag] || 0) + 1;
+        if (tw[tag] >= 2) {
+          toAdd.push({ chapterId: chapter.id, unitId: r.unitId || unit.id, level: r.level || level, q: r.q, ans: r.ans });
+          tw[tag] = 0; // 学び直しに出したのでカウンタをリセット
+        }
+      } else {
+        const uid = r.unitId || unit.id;
+        unitCount[uid] = (unitCount[uid] || 0) + 1;
+        if (unitCount[uid] === 2) toAdd.push({ chapterId: chapter.id, unitId: uid, level: r.level || level, q: r.q, ans: r.ans });
+      }
+    }
+    updatePlayer((p) => ({ ...p, tagWrong: tw }));
+    const mistakes = toAdd.map((m) => makeMistake({ studentId: sid, ...m }));
     const newMistakes = store.addMistakes(mistakes);
     setData((d) => ({ ...d, records: store.load().records, mistakes: newMistakes }));
     addXp(xp);
@@ -1528,6 +1545,9 @@ export default function App() {
         level={sel.level}
         anshin
         navDifficulty={!!sel.nav}
+        initialNavLevel={(data.player.navLevel && data.player.navLevel[sel.unit.id]) || "standard"}
+        onNavLevelChange={(lv) => updatePlayer((p) => ({ ...p, navLevel: { ...(p.navLevel || {}), [sel.unit.id]: lv } }))}
+        cyclePracticeN={(data.player.cycle && data.player.cycle[sel.unit.id]?.practiceN) || 0}
         onComplete={saveSlowResult}
         onBackToMap={() => setScreen("chapter")}
         onHome={() => setScreen("home")}

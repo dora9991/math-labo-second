@@ -76,7 +76,7 @@ export const chapter = {
         ],
         standard: [
           p("v2s1", (r) => { const a = r(2, 5), b = r(1, 6), x = -r(1, 4); return { q: `${a}x+${b} の x=${x} のときの値は？`, ans: a * x + b, h1: "負の数を代入", h2: `${a}×(${x})+${b}=${a * x + b}` }; }),
-          p("v2s2", (r) => { const a = r(2, 5), b = r(2, 8), x = -r(2, 6); return { q: `${b}÷x… ではなく ${b}/x の x=${x} のとき（割り切れる）`, ans: b / x, h1: `${b}÷(${x})`, h2: `=${b / x}`, skip: b % x !== 0 }; }),
+          p("v2s2", (r) => { const b = r(2, 8), x = -r(2, 6); return { q: `${b}/x の x=${x} のときの値は？`, ans: b / x, h1: `xに${x}を代入`, h2: `${b}÷(${x})=${b / x}`, skip: b % x !== 0 }; }),
           p("v2s3", (r) => { const a = r(2, 4), b = r(2, 4), x = r(1, 5), y = r(1, 5); return { q: `${a}x+${b}y の x=${x}、y=${y} のとき？`, ans: a * x + b * y, h1: "両方代入", h2: `${a * x}+${b * y}=${a * x + b * y}` }; }),
           p("v2s4", (r) => { const a = r(2, 4), x = -r(1, 4); return { q: `${a}x² の x=${x} のときの値は？`, ans: a * x * x, h1: `x²は正: x²=${x * x}`, h2: `${a}×${x * x}=${a * x * x}` }; }),
           p("v2s5", (r) => { const a = r(2, 5), b = r(1, 6), x = -r(1, 5); return { q: `${a}x-${b} の x=${x} のときの値は？`, ans: a * x - b, h1: "負の数を代入", h2: `${a}×(${x})-${b}=${a * x - b}` }; }),

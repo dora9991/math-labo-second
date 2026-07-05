@@ -132,15 +132,20 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
             {passRate != null && (
               <div style={{ marginTop: 16 }}>
                 {rate >= passRate ? (
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff" }}>
-                    <div style={{ fontSize: 22, fontWeight: 900 }}>🏅 合格！</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>正答率{passRate}%でクリア！つぎは「ためす」だよ</div>
+                  <div style={{
+                    padding: "22px 16px 18px", borderRadius: 16, background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff",
+                    border: "2px solid rgba(255,255,255,.55)", boxShadow: "0 0 0 4px rgba(74,222,128,.35), 0 12px 34px rgba(16,185,129,.55)",
+                    animation: "rankUpPop .55s cubic-bezier(.2,1.4,.4,1) both", position: "relative", overflow: "hidden",
+                  }}>
+                    <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 4, animation: "rankUpPop .7s .15s cubic-bezier(.2,1.6,.4,1) both" }}>🎉🏅🎉</div>
+                    <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 2, textShadow: "0 2px 8px rgba(0,0,0,.25)" }}>合格！</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>正答率{rate}%でクリア！　つぎは「ためす」だよ 🔥</div>
                     {passActions && passActions.length > 0 && (
-                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                         {passActions.map((a, i) => (
                           <button key={i} data-sfx="none" onClick={a.onClick} style={{
-                            flex: 1, padding: "12px 8px", borderRadius: 11, border: "2px solid rgba(255,255,255,.5)", cursor: "pointer",
-                            background: "rgba(255,255,255,.16)", color: "#fff", fontWeight: 900, fontSize: 13.5, lineHeight: 1.3,
+                            flex: 1, padding: "13px 8px", borderRadius: 11, border: "2px solid rgba(255,255,255,.6)", cursor: "pointer",
+                            background: "rgba(255,255,255,.2)", color: "#fff", fontWeight: 900, fontSize: 14, lineHeight: 1.3,
                           }}>{a.label}</button>
                         ))}
                       </div>

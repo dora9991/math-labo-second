@@ -35,6 +35,19 @@ function genHardProblem(monster, lastId) {
   return genBattleProblem(monster, lastId, "oni") || genBattleProblem(monster, lastId, "advanced");
 }
 
+// 1問ごとの制限時間（秒）。基本30秒（短すぎる体感を解消）＋レベルに応じてバッファを取り、
+//  さらにプレイヤーが強いと伸びる base（stats.timer）が30を超えるならそれを尊重する。
+//  分数・除法・多段の計算は手が要るので延長＝「問題によってはもっと長く」。上限99秒。
+const BATTLE_BASE_TIME = 30;
+function questionTime(q, baseTimer = 0) {
+  let t = Math.max(BATTLE_BASE_TIME, baseTimer || 0);
+  const lv = q?.level;
+  if (lv === "advanced" || lv === "oni") t += 15;   // 発展・鬼は考える時間を厚く
+  const text = String(q?.q ?? "");
+  if (/[÷/]/.test(text) || /\d+\s*\/\s*\d+/.test(text)) t += 10; // 除法・分数は手計算が要る
+  return Math.min(99, Math.round(t));
+}
+
 export default function Battle({ player, monster, ally = null, onResult, onSpChange, onItemUse, onUseBait, onHpChange, onWinBonus, onExit, onMistake, problemSource = null, onAttempt = null, maxHearts = 5 }) {
   // problemSource: あれば出題をこの関数(lastId)→problemに差し替える＝「演習バトル」（仕様はStepUpと同一）
   // onAttempt: あれば1問ごとに {skill,unitId,level,ok,...} を通知＝習熟(Elo)＋サイクル進捗を更新
@@ -54,7 +67,7 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
   const [playerHp, setPlayerHp] = useState(startHp);
   const [monsterHp, setMonsterHp] = useState(monster.hp);
   const [q, setQ] = useState(() => (problemSource ? problemSource(null) : genBattleProblem(monster)));
-  const [timer, setTimer] = useState(stats.timer);
+  const [timer, setTimer] = useState(() => questionTime(q, stats.timer)); // 最初の問題の制限時間（基本30秒〜）
   const [combo, setCombo] = useState(0);
   const [sp, setSp] = useState(() => Math.min(SP_MAX, (player.sp ?? 0) + (gearSpecials(player).startSp || 0))); // スキルポイント（永続）＋防具の開始SPボーナス
   const [skillFx, setSkillFx] = useState(null);  // 発動中スキル/アイテムの画面演出 { name, icon, color }
@@ -229,19 +242,22 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
     else if (fh && fh.turns > 0) { mode = "advanced"; forceHardRef.current = fh.turns - 1 > 0 ? { ...fh, turns: fh.turns - 1 } : null; }
     // 敵の「難問化/超難問」効果(mode)は、problemSource(適応出題/誤答束混入)より優先する
     //  （#2でproblemSourceを通常バトルにも接続したため、mode強制中はそれを一時的に上書きする必要がある）。
-    setQ((cur) => (
-      mode === "max" ? genHardProblem(monster, cur?.id)
-      : mode === "advanced" ? genBattleProblem(monster, cur?.id, mode)
-      : problemSource ? problemSource(cur?.id)
-      : genBattleProblem(monster, cur?.id, mode)
-    ));
+    // 次の問題を先に確定させ、その問題に応じた制限時間（基本30秒〜）を決める。
+    //  q?.id は直前の問題（重複回避のヒント。多少ずれても実害なし）。
+    const nextQ =
+      mode === "max" ? genHardProblem(monster, q?.id)
+      : mode === "advanced" ? genBattleProblem(monster, q?.id, mode)
+      : problemSource ? problemSource(q?.id)
+      : genBattleProblem(monster, q?.id, mode);
+    setQ(nextQ);
     setInput("");
     setLocked(false); lockedRef.current = false;
-    // 制限時間：時間バフ（しゅうちゅう等）で伸ばし、敵デバフ（時間どろぼう等）で縮める
+    // 制限時間：問題ごとの基本時間に、時間バフ（しゅうちゅう等）／敵デバフ（時間どろぼう等）を適用
+    const baseT = questionTime(nextQ, stats.timer);
     const tb = timeBuffRef.current;
-    let t = stats.timer;
+    let t = baseT;
     if (tb && tb.turns > 0) {
-      t = tb.inf ? 99 : Math.min(99, Math.ceil(stats.timer * (tb.mult ?? 1.5)));
+      t = tb.inf ? 99 : Math.min(99, Math.ceil(baseT * (tb.mult ?? 1.5)));
       timeBuffRef.current = tb.turns - 1 > 0 ? { ...tb, turns: tb.turns - 1 } : null;
     }
     const td = timeDebuffRef.current;

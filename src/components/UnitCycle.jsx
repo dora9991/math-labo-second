@@ -29,7 +29,8 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
   const units = ch.units || [];
 
   // cleared=true の時：黄色線で囲み、ボタン下に「✓クリア！」を出す（どこまで進んだか一目で）。
-  const stepBtn = (onClick, label, bg, cleared = false) => (
+  //  sub を渡すと、ラベルの下に小さな説明文を出す（れんしゅう/バトルの誘い文句など）。
+  const stepBtn = (onClick, label, bg, cleared = false, sub = null) => (
     <button data-sfx="none" onClick={onClick} style={{
       flex: 1, minWidth: 0, padding: "8px 4px", borderRadius: 9, cursor: "pointer", fontSize: 11, fontWeight: 800,
       color: "#fff", lineHeight: 1.2, background: bg,
@@ -37,6 +38,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
       boxShadow: cleared ? "0 0 0 2px rgba(253,224,71,.35)" : undefined,
     }}>
       <span style={{ display: "block" }}>{label}</span>
+      {sub && <span style={{ display: "block", fontSize: 8.5, fontWeight: 700, opacity: .9, marginTop: 3, lineHeight: 1.3 }}>{sub}</span>}
       {cleared && <span style={{ display: "block", fontSize: 9, fontWeight: 900, color: "#fde047", marginTop: 2 }}>✓クリア！</span>}
     </button>
   );
@@ -141,8 +143,8 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               </>
             ) : tame === u.id ? (
               <div style={{ display: "flex", gap: 6 }}>
-                {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC)}
-                {stepBtn(() => onBattle?.(u), "⚔️ バトル", "linear-gradient(135deg,#ef4444,#b91c1c)")}
+                {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC, "じっくり計算して、確実にレベルアップしよう！")}
+                {stepBtn(() => onBattle?.(u), "⚔️ バトル", "linear-gradient(135deg,#ef4444,#b91c1c)", false, "制限時間内にモンスターを倒せるか！？")}
                 {stepBtn(() => setTame(null), "← もどる", "rgba(255,255,255,.12)")}
               </div>
             ) : (
