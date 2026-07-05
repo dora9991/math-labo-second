@@ -1741,6 +1741,14 @@ export default function App() {
           onSpChange={(sp) => updatePlayer((p) => ({ ...p, sp }))}
           onHpChange={(hp) => updatePlayer((p) => ({ ...p, currentHp: hp }))}
           onMistake={recordWrongAnswer}
+          onDex={(monsterId, info) => updatePlayer((p) => {
+            const prev = (p.enemyDex && p.enemyDex[monsterId]) || { enc: 0, moves: {}, defeated: false };
+            return { ...p, enemyDex: { ...(p.enemyDex || {}), [monsterId]: {
+              enc: (prev.enc || 0) + 1,
+              moves: { ...(prev.moves || {}), ...(info.moves || {}) },
+              defeated: prev.defeated || !!info.defeated,
+            } } };
+          })}
           onExit={() => {
             if (battlePractice) { setBattlePractice(null); setBattleMonster(null); setScreen("home"); }
             else setBattleMonster(null);

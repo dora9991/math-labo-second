@@ -61,6 +61,31 @@ export function patternForMonster(monster) {
   return C1_PATTERN_BY_UNIT[monster.unitId] || "attack";
 }
 
+// ── ボス2段階変身 ──────────────────────────────────
+//  章ボスは HP が半分を切ると「変身」してパターンが激しくなる（予告あり）。
+//  第1段階=ためる型（大技を予告）→ 第2段階=連続こうげき型（手数で押す）。
+export function isTwoPhaseBoss(monster) {
+  return !!monster && monster.kind === "chapterBoss";
+}
+export const BOSS_PHASE2_PATTERN = "multi";
+
+// ── ジャスト防御 ────────────────────────────────────
+//  敵の「ためた大技(burst/multi)」を、防御を選んで正解したターンに受けると
+//  “ジャスト防御”成立＝反撃ダメージ。予告を読む行為に報酬を与える。
+export const JUST_GUARD_COUNTER_MULT = 1.0; // 反撃＝通常こうげき baseDmg の何倍か
+
+// ── 学習連動スキル入手（次段: ロードアウト制と対）──────────
+//  正負の各単元サイクルをクリアすると、その単元の敵の“対策スキル”を授かる。
+//  「苦しんだ敵の対策を、学習で手に入れる」＝学ぶ＝強くなる。
+export const LEARN_UNLOCK_C1 = {
+  u1: "heal",       // こうげき型 → まず生存の かいふく
+  u2: "guard1",     // ためる型   → 大ダメージを和らげる ダメ軽減
+  u3: "antisleep",  // ねむり型   → めざまし
+  u4: "barrier",    // まもり型   → 押し切る バリア
+  u5: "guard1",     // 連続型     → ダメ軽減（既得なら実質ボーナス）
+  u6: "antipoison", // どく型     → どく消し
+};
+
 /**
  * 敵の1ターンの行動を決める（純関数）。
  * @param {string} patternId TURN_ENEMY_PATTERNS のキー

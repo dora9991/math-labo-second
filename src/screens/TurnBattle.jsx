@@ -20,6 +20,7 @@ import { isCorrect, playerLevel } from "../engine/scoring.js";
 import {
   patternForMonster, turnEnemyDecide, TURN_ENEMY_PATTERNS, TURN_SKILLS, findTurnSkill,
   baseAttackDamage, nextTurnProblem, TURN_SP_MAX, ULT_COST, ULT_MULT,
+  isTwoPhaseBoss, BOSS_PHASE2_PATTERN, JUST_GUARD_COUNTER_MULT,
 } from "../engine/battleTurn.js";
 
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
@@ -39,14 +40,17 @@ function questionTime(q) {
 }
 
 export default function TurnBattle({
-  player, monster, onResult, onSpChange, onHpChange, onMistake, onExit,
+  player, monster, onResult, onSpChange, onHpChange, onMistake, onExit, onDex = null,
   problemSource = null, onAttempt = null, maxHearts = 5,
 }) {
   const lv = playerLevel(player);
   const maxHp = maxHearts;
-  const pattern = useRef(patternForMonster(monster)).current;
-  const patInfo = TURN_ENEMY_PATTERNS[pattern] || TURN_ENEMY_PATTERNS.attack;
+  const patternRef = useRef(patternForMonster(monster)); // ボスは変身で書き換わる
+  const [patKey, setPatKey] = useState(0);               // パターン表示の再描画用
+  const patInfo = TURN_ENEMY_PATTERNS[patternRef.current] || TURN_ENEMY_PATTERNS.attack;
   const baseDmg = useRef(baseAttackDamage(monster)).current;
+  const bossPhaseRef = useRef(1);                          // 章ボスの段階(1→2)
+  const dexMovesRef = useRef({});                          // この戦闘で見た敵の技（図鑑記録用）
 
   // ── 表示state ──
   const [phase, setPhase] = useState("intro"); // intro | command | question | sleep | win | lose
@@ -106,6 +110,13 @@ export default function TurnBattle({
   useEffect(() => { if (phase === "question" && !lockedRef.current) inputRef.current?.focus(); }, [phase, q]);
 
   const saveHp = (hp) => onHpChange?.(hp >= maxHp ? null : Math.max(0, Math.round(hp)));
+  // 敵図鑑：この戦闘の記録を1回だけ書き出す（勝敗・逃走どれでも＝負けても埋まる）
+  const dexFlushedRef = useRef(false);
+  function flushDex(defeated) {
+    if (dexFlushedRef.current) return;
+    dexFlushedRef.current = true;
+    onDex?.(monster.id, { moves: { ...dexMovesRef.current }, defeated: !!defeated });
+  }
   const setTimerBoth = (v) => { timerRef.current = v; setTimer(v); };
   function changeSp(nv) {
     const v = Math.max(0, Math.min(TURN_SP_MAX, nv));
@@ -254,6 +265,7 @@ export default function TurnBattle({
     const nv = Math.max(0, monHpRef.current - dmg);
     monHpRef.current = nv; setMonsterHp(nv);
     if (nv <= 0) { setTimeout(triggerWin, 700); return; }
+    checkBossPhase(nv);
     setTimeout(() => { setMonState("idle"); if (!endedRef.current) enemyPhase(); }, 800);
   }
 
@@ -288,8 +300,10 @@ export default function TurnBattle({
   // ============ 敵ターン ============
   function enemyPhase() {
     if (endedRef.current) return;
-    const { st, act } = turnEnemyDecide(pattern, aiStateRef.current);
+    const { st, act } = turnEnemyDecide(patternRef.current, aiStateRef.current);
     aiStateRef.current = st;
+    // 敵図鑑：実際に出した技を記録（負けても残る＝観察メモ）
+    if (act.kind && act.kind !== "charging") { dexMovesRef.current[act.kind] = true; setPatKey((k) => k + 1); }
 
     if (act.kind === "charging") {
       setCharging(true);
@@ -335,6 +349,7 @@ export default function TurnBattle({
       return;
     }
     if (act.kind === "multi") {
+      const justGuard = guardActiveRef.current; // ためた大技を防御で受けた＝ジャスト防御
       const hits = act.hits || 3;
       showEnemyFx({ icon: "✊", label: `${hits}連続こうげき！`, color: "#fb7185" });
       let i = 0;
@@ -343,17 +358,53 @@ export default function TurnBattle({
         enemyDamage(act.per || 1, `${monster.name} の連続こうげき（${i + 1}/${hits}）`);
         i++;
         if (i < hits && !endedRef.current) setTimeout(doHit, 340);
-        else afterEnemy();
+        else { if (justGuard) justGuardCounter(); afterEnemy(); }
       };
       doHit();
       return;
     }
     // attack / burst（単発ダメージ）
     const dmg = act.dmg || 1;
-    const label = act.kind === "burst" ? `${monster.name} の ためた一撃！` : `${monster.name} のこうげき！`;
-    if (act.kind === "burst") showEnemyFx({ icon: "💥", label: "ためた一撃！", color: "#f87171" });
+    const isBurst = act.kind === "burst";
+    const justGuard = isBurst && guardActiveRef.current; // ためた一撃を防御で受けた＝ジャスト防御
+    const label = isBurst ? `${monster.name} の ためた一撃！` : `${monster.name} のこうげき！`;
+    if (isBurst) showEnemyFx({ icon: "💥", label: "ためた一撃！", color: "#f87171" });
     enemyDamage(dmg, label);
+    if (justGuard) justGuardCounter();
     afterEnemy();
+  }
+
+  // ジャスト防御の反撃：ためた大技を防御で受け切ったら、敵に反撃ダメージ
+  function justGuardCounter() {
+    if (endedRef.current) return;
+    const cdmg = Math.max(1, Math.round(baseDmg * JUST_GUARD_COUNTER_MULT));
+    setTimeout(() => {
+      if (endedRef.current) return;
+      sfx.skill();
+      setMonState("damage"); setAnimKey((k) => k + 1);
+      setMonDmg(`-${cdmg}`); setDmgKey((k) => k + 1);
+      showEnemyFx({ icon: "🛡️⚡", label: "ジャスト防御！反撃！", color: "#fde047" });
+      setLog(`🛡️⚡ ジャスト防御成功！ 反撃 ${cdmg}ダメージ！`);
+      const nv = Math.max(0, monHpRef.current - cdmg);
+      monHpRef.current = nv; setMonsterHp(nv);
+      if (nv <= 0) setTimeout(triggerWin, 500);
+      else { checkBossPhase(nv); setTimeout(() => setMonState("idle"), 500); }
+    }, 500);
+  }
+
+  // 章ボスの2段階変身：HP半分を切ったら一度だけパターンを激化（予告つき）
+  function checkBossPhase(hp) {
+    if (!isTwoPhaseBoss(monster) || bossPhaseRef.current >= 2) return;
+    if (hp > monster.hp * 0.5) return;
+    bossPhaseRef.current = 2;
+    patternRef.current = BOSS_PHASE2_PATTERN;
+    aiStateRef.current = {}; // ため状態をリセットして新パターンへ
+    setPatKey((k) => k + 1);
+    sfx.skill({ ult: true });
+    setSkillFx({ name: `${monster.name} 変身！`, icon: "🌀", color: "#e879f9", big: true });
+    setTimeout(() => setSkillFx(null), 1600);
+    setEnemyIntent({ text: "🌀 変身した！ 攻撃が激しくなる！", color: "#e879f9" });
+    setLog(`⚠️ ${monster.name} は変身した！ 手数で押してくる…！`);
   }
 
   // 敵の1撃をプレイヤーへ（バリア→防御半減→軽減の順で処理）
@@ -403,6 +454,7 @@ export default function TurnBattle({
   function triggerWin() {
     if (endedRef.current) return;
     endedRef.current = true;
+    flushDex(true);
     saveHp(hpRef.current);
     phaseRef.current = "win"; setPhase("win");
     bgm.play("victory", { loop: false });
@@ -419,6 +471,7 @@ export default function TurnBattle({
   function triggerLose() {
     if (endedRef.current) return;
     endedRef.current = true;
+    flushDex(false);
     saveHp(1);
     phaseRef.current = "lose"; setPhase("lose");
     bgm.play("defeat", { loop: false });
@@ -478,6 +531,13 @@ export default function TurnBattle({
             <span className="bt-hp-num">{Math.max(0, monsterHp)} / {monster.hp}</span>
           </div>
           {enemyGuardRef.current > 0 && <div style={{ fontSize: 11, fontWeight: 900, color: "#93c5fd", marginTop: 2 }}>🛡️ まもり中（こうげきが通らない）</div>}
+          {(() => {
+            const MOVE_LABEL = { attack: "👊こうげき", burst: "💥ためた一撃", multi: "✊連続", sleep: "😴ねむらせ", guard: "🛡️まもり", poison: "☠️どく" };
+            const seen = Object.keys(dexMovesRef.current).map((k) => MOVE_LABEL[k]).filter(Boolean);
+            return seen.length > 0 ? (
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "#a7f3d0", marginTop: 3 }}>🔍 観察メモ：{seen.join(" ・ ")}</div>
+            ) : null;
+          })()}
         </div>
 
         {/* 舞台 */}
@@ -617,7 +677,7 @@ export default function TurnBattle({
 
         {/* バトルログ */}
         <div className="bt-panel bt-log"><span className="new">{log}</span></div>
-        <button className="back-btn" style={{ alignSelf: "center" }} onClick={() => { if (!endedRef.current) saveHp(hpRef.current); onExit(); }}>← にげる</button>
+        <button className="back-btn" style={{ alignSelf: "center" }} onClick={() => { if (!endedRef.current) saveHp(hpRef.current); flushDex(false); onExit(); }}>← にげる</button>
       </div>
     </div>
   );
