@@ -55,7 +55,8 @@ export default function ToketaHint({ problem, compact = false }) {
         <>
           <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 4 }}>どこで まよってる？ えらんでね 👇</div>
           {tags.map((tag) => (
-            <button key={tag} style={PICK} onClick={() => setHintTag(tag)}>{SYM[tag] || (MISC[tag]?.label ? `「${MISC[tag].label}」かも` : "ここ かも")}</button>
+            // 「計算ミス」は抽象的な励ましではなく、具体的なお手本（式の計算）へ直行する
+            <button key={tag} style={PICK} onClick={() => (tag === "calc" ? setStepN(1) : setHintTag(tag))}>{SYM[tag] || (MISC[tag]?.label ? `「${MISC[tag].label}」かも` : "ここ かも")}</button>
           ))}
           <button style={{ ...PICK, background: "#eef2ff", border: "1px solid #c7d2fe", color: "#3730a3" }} onClick={() => setStepN(1)}>🪜 解き方を じゅんばんに見る（お手本）</button>
         </>
