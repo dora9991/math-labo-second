@@ -128,6 +128,7 @@ export default function App() {
   const baitUsedRef = useRef(null); // 今のバトルで「魔物のエサ」を使った敵のid
   const [calcKingClear, setCalcKingClear] = useState(null); // 計算王クリア演出（バトル攻撃力アップ）
   const [newMonster, setNewMonster] = useState(null); // 新モンスター出現演出（タイムアタックで解放）
+  const [relearnFocus, setRelearnFocus] = useState(null); // 学び直しを1単元にしぼる（サイクルのなおす由来）。null=弱点克服モード（全部）
   const [weakKey, setWeakKey] = useState(0); // 苦手タイムアタックの再挑戦（もう一回）でリセットする用
   const [practiceUnit, setPracticeUnit] = useState(null); // 間違いノートの単元別じっくり練習で選んだ単元
   const [calcChapter, setCalcChapter] = useState(null); // 計算王への道で選んだ単元（章）
@@ -291,7 +292,8 @@ export default function App() {
     addXp(xp);
 
     // 7) 新モンスター出現の通知。レベルアップがあれば演出の後、無ければ少し後に出す
-    if (unlockedMon) {
+    // 正負(c1)は「出現！」ポップアップを出さない（ためすから直接その敵と戦えるため冗長）。
+    if (unlockedMon && unlockedMon.chapterId !== "c1") {
       if (willLevelUp) {
         pendingMonsterRef.current = unlockedMon; // レベルアップ演出の onDone で出す
       } else {
@@ -386,7 +388,8 @@ export default function App() {
       const monster = MONSTERS.find((m) => m.kind === "unit" && m.unitId === unit.id);
       if (monster && !isUnitMonsterUnlocked(data.player, monster)) {
         markMonstersSeen([monster.id]);
-        setTimeout(() => setNewMonster(monster), 900);
+        // 正負(c1)は「出現！」ポップアップを出さない
+        if (monster.chapterId !== "c1") setTimeout(() => setNewMonster(monster), 900);
       }
     }
   }
@@ -559,9 +562,10 @@ export default function App() {
       // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
       // #4 有能感のピーク（サイクル初クリア）に「応用の扉」を出す。レベルアップ演出の後に表示。
+      //  ※正負(c1)は祝いモーダルを出さず、サイクル内の「🧮 応用」ボタンで誘導する（ためすクリアで強調）。
       const clearedChapter = findChapterByUnitId(unitId);
       const clearedUnit = findUnitById(unitId);
-      if (clearedChapter) {
+      if (clearedChapter && clearedChapter.id !== "c1") {
         pendingApplyGateRef.current = { chapterId: clearedChapter.id, chapterName: clearedChapter.name, unitName: clearedUnit?.name || "" };
       }
     } else if (wasCleared) {
@@ -1565,6 +1569,8 @@ export default function App() {
       <Relearn
         player={data.player}
         mistakes={data.mistakes}
+        focusUnitId={relearnFocus}
+        onSeeAll={() => setRelearnFocus(null)}
         onRelearn={(unit) => { relearnStreakRef.current[unit.id] = 0; setPracticeUnit(unit); setScreen("relearnPractice"); }}
         onHaichi={(unit) => openHaichiStudio(unit, "relearn")}
         onRemove={removeNote}
@@ -1830,7 +1836,8 @@ export default function App() {
       onTimeAttack={() => goChapter("timeAttack")}
       onChallenge={() => setScreen("calcKingPick")}
       onBattle={() => setScreen("battle")}
-      onRelearn={() => setScreen("relearn")}
+      onRelearn={(unit) => { setRelearnFocus(unit?.id || null); setScreen("relearn"); }}
+      onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}
       onDialogue={() => setScreen("dialogue")}
       onTeacherMode={() => setScreen("teacherMode")}
       onHaichi={() => setScreen("haichi")}

@@ -24,9 +24,24 @@ export function currentNode(teacherMode, state) {
   return findNode(teacherMode, state.nodeId);
 }
 
+// 板書は「端的に式・要点のみ」。説明の全文は右側パネル＋音声で読み上げる（画面側）。
+//  node.board があればそれを板書に、無ければ node.text の要点だけを短く抜き出す。
+//   要点抽出：最初の1文（。/！/？で区切る）→ さらに「〜は」「〜のは」等の前置きを落として、
+//   長ければ末尾を … で丸める。式（=,+,−,×,÷ を含む句）があればそれを優先。
+function concisePoint(text) {
+  if (!text) return "";
+  const s = String(text).trim();
+  // 式を含む句があれば最優先で拾う
+  const mathClause = s.split(/[。！？、]/).map((t) => t.trim()).find((t) => t && /[=＝+＋\-−×÷…]|[0-9]\s*[+\-×÷]/.test(t));
+  let point = mathClause || s.split(/[。！？]/)[0].trim();
+  point = point.replace(/^(まず|だから|つまり|そして|でも|ここで|大事なのは|ポイントは|今日は)、?/, "");
+  if (point.length > 30) point = point.slice(0, 29) + "…";
+  return point;
+}
+
 const boardLineFor = (node, kind) => {
   if (!node) return null;
-  if (node.type === "explain") return { text: node.text, kind };
+  if (node.type === "explain") return { text: node.board || concisePoint(node.text), kind };
   if (node.type === "check") return { text: node.question, kind: "problem" };
   return null;
 };

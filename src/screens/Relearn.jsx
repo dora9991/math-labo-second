@@ -25,7 +25,7 @@ function phaseOf(list, today) {
   return pend.pendingAt === today ? "pendingToday" : "confirm";
 }
 
-export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, onBack }) {
+export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, onBack, focusUnitId = null, onSeeAll = null }) {
   const today = new Date().toLocaleDateString("ja-JP");
   // 間違いを単元ごとにまとめる（単元が分からないものは「その他」へ）
   const groups = {};
@@ -33,16 +33,26 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
     const key = m.unitId || "_other";
     (groups[key] ||= []).push(m);
   }
-  const keys = Object.keys(groups);
+  // サイクルの「なおす」から来たときは、その小単元だけにしぼる。
+  const focusUnit = focusUnitId ? findUnitById(focusUnitId) : null;
+  const keys = focusUnitId ? Object.keys(groups).filter((k) => k === focusUnitId) : Object.keys(groups);
+  const focusEmpty = focusUnitId && keys.length === 0;
 
   return (
     <div className="app">
       <Header player={player} back="ホーム" onBack={onBack} />
       <div className="content">
-        <div className="pg-ttl">📖 学び直しモード</div>
+        <div className="pg-ttl">{focusUnitId ? `📖 学び直し・${focusUnit ? focusUnit.name : "この単元"}` : "🩹 弱点克服モード"}</div>
         <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。<b style={{ color: "#7dd3fc" }}>2回れんぞく正解</b>でなおせて、<b style={{ color: "#86efac" }}>つぎの日にもう1問</b>とけたらカンペキ（ノートから消える）。1問 +15XP。</div>
+        {/* この単元だけ表示中：全部の弱点一覧へ */}
+        {focusUnitId && onSeeAll && (
+          <button data-sfx="none" onClick={onSeeAll} style={{ margin: "0 0 10px", padding: "9px 12px", borderRadius: 10, cursor: "pointer",
+            fontSize: 12.5, fontWeight: 800, color: "#c4b5fd", border: "1px solid rgba(167,139,250,.4)", background: "rgba(167,139,250,.10)" }}>
+            🩹 弱点克服モード（ぜんぶの学び直しを見る）→
+          </button>
+        )}
 
-        {mistakes.length === 0 ? (
+        {(focusEmpty || mistakes.length === 0) ? (
           <div className="glass">
             <div className="empty">
               <div className="empty-icon">🎉</div>

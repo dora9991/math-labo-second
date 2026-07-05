@@ -151,8 +151,10 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onHaichi?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                 {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
-                {stepBtn(() => onRelearn?.(), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
-                {stepBtn(() => onChallenge?.(), "🧮 応用", "rgba(139,92,246,.5)", ouyouC)}
+                {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
+                {stepBtn(() => onChallenge?.(), "🧮 応用",
+                  tameC && !ouyouC ? "linear-gradient(135deg,#a855f7,#8b5cf6)" : "rgba(139,92,246,.5)",
+                  ouyouC, tameC && !ouyouC ? "ためすクリア！挑戦しよう" : null)}
               </div>
             )}
           </div>

@@ -15,7 +15,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
-  onChallenge, onRelearn, onUnitHaichi, onUnitPractice, onUnitBattle, onDiagnose,
+  onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitPractice, onUnitBattle, onDiagnose,
   onDetail, onCharacter, onTeacherMode,
 }) {
   const availGrades = gradesWithChapters();
@@ -97,6 +97,21 @@ export default function Home({
         </button>
         {cycleOpen && (
           <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
+        )}
+
+        {/* 弱点克服モード（学習サイクルの外・自分の学び直し一覧をまとめて見る） */}
+        {onWeakness && (
+          <button data-sfx="none" onClick={onWeakness} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            margin: "0 0 8px", padding: "12px 14px", borderRadius: 13, cursor: "pointer", fontFamily: "inherit",
+            border: "1.5px solid rgba(56,189,248,.4)", background: "rgba(56,189,248,.10)", color: "#fff",
+          }}>
+            <span style={{ fontSize: 22 }}>🩹</span>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>弱点克服モード</span>
+              <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .65 }}>自分がまちがえた問題をまとめて学び直そう</span>
+            </span>
+          </button>
         )}
 
         {/* 教師モード（黒板で先生の説明を聞く。学習サイクルとは独立の入口） */}
