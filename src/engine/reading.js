@@ -98,15 +98,23 @@ function normalizeForSpeech(text) {
 }
 
 let _voiceJa = null;
+// 端末にある日本語音声から、聞きやすいものを優先して選ぶ（ロボット的な既定より自然な声を先に）。
+const JA_VOICE_PREFER = ["Kyoko", "O-ren", "Otoya", "Google 日本語", "Microsoft Nanami", "Microsoft Ayumi", "Microsoft Haruka"];
 function pickJaVoice() {
   try {
     const vs = window.speechSynthesis.getVoices() || [];
-    _voiceJa = vs.find((v) => /ja|japan/i.test(v.lang)) || null;
+    const ja = vs.filter((v) => /ja|japan/i.test(v.lang));
+    _voiceJa = JA_VOICE_PREFER.map((name) => ja.find((v) => v.name.includes(name))).find(Boolean)
+      || ja.find((v) => !/eloquence|compact/i.test(v.name)) // 機械的な軽量音声は避ける
+      || ja[0] || null;
   } catch { _voiceJa = null; }
 }
 
-/** 問題文を読み上げる（対応していない端末では何もしない）。 */
-export function speakText(text) {
+// 音声一覧は非同期で届くことがある（初回 getVoices が空）。届いたら選び直す。
+try { if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", pickJaVoice); } catch { /* noop */ }
+
+/** 問題文を読み上げる（対応していない端末では何もしない）。opts.rate で速度を指定。 */
+export function speakText(text, opts = {}) {
   try {
     if (!("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
@@ -114,7 +122,8 @@ export function speakText(text) {
     if (!_voiceJa) pickJaVoice();
     const u = new SpeechSynthesisUtterance(normalizeForSpeech(text));
     u.lang = "ja-JP";
-    u.rate = 0.95;
+    u.rate = opts.rate ?? 0.95;
+    u.pitch = opts.pitch ?? 1.05; // ほんの少し高めで明るく
     if (_voiceJa) u.voice = _voiceJa;
     synth.speak(u);
   } catch { /* 失敗しても無視（音声非対応端末など） */ }

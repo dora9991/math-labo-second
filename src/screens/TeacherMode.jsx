@@ -165,29 +165,45 @@ function ProblemPicker({ player, unitKey, onPick, onBack, confirmBtn = null }) {
   );
 }
 
+// 長い説明を「。！？」で短い一言（ビート）に刻む。先生は一度に一言だけ話す＝読みやすい・聞きやすい。
+function splitBeats(text) {
+  const s = String(text || "").trim();
+  if (!s) return [];
+  const parts = s.split(/(?<=[。！？])/).map((t) => t.trim()).filter(Boolean);
+  return parts.length ? parts : [s];
+}
+
 // ── ③ 黒板＋先生（ノードグラフ再生） ───────────────────────
 function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = null }) {
   const tm = problem.teacher_mode;
   const [state, setState] = useState(() => startTeacherMode(tm));
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false); // 既定OFF（短文化で読めるので音声は"欲しい人だけ"）
+  const [beat, setBeat] = useState(0);            // explainノード内の「一言」の位置
   const [picked, setPicked] = useState(null); // check中に選んだ選択肢のindex（結果表示用）
   const boardRef = useRef(null);
   const canSpeak = speechAvailable();
 
   const node = currentNode(tm, state);
+  // explainノードは短い一言に分割。checkは問い1つ。
+  const beats = node && node.type !== "check" ? splitBeats(node.text) : [];
+  const lastBeat = beats.length ? beat >= beats.length - 1 : true;
+  const curText = state.done ? "よくがんばったね！これでこの問題の説明はおしまい。"
+    : node?.type === "check" ? node.question : (beats[beat] ?? node?.text ?? "");
 
   useEffect(() => {
     if (boardRef.current) boardRef.current.scrollTop = boardRef.current.scrollHeight;
   }, [state.board.length]);
 
-  // 現在のノードのテキストを読み上げる
+  // ノードが変わったら一言の位置をリセット
+  useEffect(() => { setBeat(0); }, [state.nodeId]);
+
+  // 「今の一言」だけを読み上げる（短いので聞きやすい）。少しゆっくり。
   useEffect(() => {
-    if (!voiceOn || !node) return;
-    const text = node.type === "check" ? node.question : node.text;
-    speakText(text);
+    if (!voiceOn || !curText) return;
+    speakText(curText, { rate: 0.9 });
     return () => stopSpeak();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.nodeId, voiceOn]);
+  }, [state.nodeId, beat, voiceOn, state.done]);
 
   const choose = (i) => {
     if (picked != null) return;
@@ -237,18 +253,20 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
             ))}
           </div>
 
-          {/* 右：先生（声で問いかける） */}
+          {/* 右：先生（今の一言だけを大きく・短く。長文の壁にしない＝案A/B） */}
           <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ textAlign: "center", fontSize: 64, lineHeight: 1, filter: "drop-shadow(0 4px 10px rgba(0,0,0,.4))" }}>{teacherFace}</div>
-            <div className="glass" style={{ flex: 1, padding: 13, fontSize: 13.5, lineHeight: 1.65, overflowY: "auto" }}>
-              <div style={{ fontSize: 10, fontWeight: 900, color: "#a5b4fc", marginBottom: 5 }}>先生</div>
-              {state.done ? (
-                "よくがんばったね！これでこの問題の説明はおしまい。"
-              ) : node?.type === "check" ? (
-                node.question
-              ) : (
-                node?.text
-              )}
+            <div className="glass" style={{ flex: 1, padding: 14, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}>
+                <span style={{ fontSize: 10, fontWeight: 900, color: "#a5b4fc" }}>先生</span>
+                {/* 一言の進み具合（ドット） */}
+                {beats.length > 1 && (
+                  <span style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
+                    {beats.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: i <= beat ? "#a5b4fc" : "rgba(255,255,255,.2)" }} />)}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.7, letterSpacing: ".01em" }}>{curText}</div>
             </div>
           </div>
         </div>
@@ -279,9 +297,10 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
               ))}
             </div>
           ) : (
-            <button className="nb-btn" onClick={() => setState((s) => advanceExplain(tm, s))}
+            <button className="nb-btn"
+              onClick={() => { if (!lastBeat) setBeat((b) => b + 1); else setState((s) => advanceExplain(tm, s)); }}
               style={{ width: "100%", background: "linear-gradient(135deg,#6366f1,#818cf8)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
-              次へ →
+              {lastBeat ? "次へ →" : "▽ つづき"}
             </button>
           )}
         </div>
