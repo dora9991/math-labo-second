@@ -151,16 +151,14 @@ export default function TurnBattle({
 
   // ============ ターンの流れ ============
 
-  // ターン開始：睡眠中なら自動で1ターン経過。そうでなければ（案A）既定＝こうげきで即・問題へ。
-  //  行動選択は強制しない。防御/スキル/必殺技は問題中に「作戦」として任意で選べる。
+  // ターン開始：睡眠中なら自動で1ターン経過、そうでなければ行動選択へ
   function startTurn() {
     if (endedRef.current) return;
+    setPending(null); pendingRef.current = null;
     setShowSkills(false);
     guardActiveRef.current = false;
     if (sleepRef.current > 0) { doSleepTurn(); return; }
-    pendingRef.current = { type: "attack" };
-    setPending({ type: "attack", label: "⚔️ こうげき" });
-    beginQuestion();
+    phaseRef.current = "command"; setPhase("command");
   }
 
   // 睡眠ターン：行動できず、敵だけ動く
@@ -169,12 +167,12 @@ export default function TurnBattle({
     setLog("💤 ねむっていて動けない…！");
     sleepRef.current = Math.max(0, sleepRef.current - 1);
     refreshTags();
-    setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 650);
+    setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 900);
   }
 
-  // 案A: 問題を解いている最中に「作戦」を任意で選ぶ（解けば既定＝こうげき）。問題は作り直さない。
-  function armAction(type, skill = null) {
-    if (phaseRef.current !== "question" || lockedRef.current || endedRef.current) return;
+  // 行動を選ぶ → 問題へ
+  function chooseAction(type, skill = null) {
+    if (phaseRef.current !== "command" || endedRef.current) return;
     if (type === "ultimate" && spRef.current < ULT_COST) { setLog(`必殺技には SP${ULT_COST} 必要！（今 ${spRef.current}）`); return; }
     if (type === "skill") {
       if (!skill) { setShowSkills((v) => !v); return; }
@@ -188,6 +186,7 @@ export default function TurnBattle({
     pendingRef.current = { type, skill };
     setPending({ type, skill, label });
     setShowSkills(false);
+    beginQuestion();
   }
 
   function beginQuestion() {
@@ -207,7 +206,7 @@ export default function TurnBattle({
     if (q) { onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level }); onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans }); }
     setShakeAns(true); setTimeout(() => setShakeAns(false), 460);
     setLog(`⏰ 時間切れ！ ${pending?.label || "行動"}は失敗… (正解 ${q?.ans})`);
-    setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 600);
+    setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 850);
   }
 
   function submitAnswer(val) {
@@ -228,7 +227,7 @@ export default function TurnBattle({
       onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level });
       setShakeAns(true); setTimeout(() => setShakeAns(false), 460);
       setLog(`不正解… ${pending?.label || "行動"}は失敗した（正解 ${q.ans}）`);
-      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 600);
+      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 950);
     }
   }
 
@@ -238,12 +237,12 @@ export default function TurnBattle({
     if (p.type === "guard") {
       guardActiveRef.current = true;
       setLog("🛡️ ぼうぎょ！ このターンの被ダメージを半分にする");
-      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 380);
+      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 700);
       return;
     }
     if (p.type === "skill") {
       applySkill(p.skill);
-      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 480);
+      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 800);
       return;
     }
     // 攻撃 / 必殺技
@@ -256,7 +255,7 @@ export default function TurnBattle({
       setMonState("idle"); setAnimKey((k) => k + 1);
       showEnemyFx({ icon: "🛡️", label: "こうげきを防がれた！", color: "#60a5fa" });
       setLog(`${monster.name} は身をまもっている！ こうげきが通らない…`);
-      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 450);
+      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 800);
       return;
     }
     if (isUlt) { sfx.skill({ ult: true }); setSkillFx({ name: "必殺技", icon: "💥", color: "#f472b6", big: true }); setTimeout(() => setSkillFx(null), 1400); }
@@ -265,9 +264,9 @@ export default function TurnBattle({
     setLog(isUlt ? `💥 必殺技さくれつ！ ${dmg}ダメージ！` : `⚔️ こうげき！ ${dmg}ダメージ！`);
     const nv = Math.max(0, monHpRef.current - dmg);
     monHpRef.current = nv; setMonsterHp(nv);
-    if (nv <= 0) { setTimeout(triggerWin, 550); return; }
+    if (nv <= 0) { setTimeout(triggerWin, 700); return; }
     checkBossPhase(nv);
-    setTimeout(() => { setMonState("idle"); if (!endedRef.current) enemyPhase(); }, 450);
+    setTimeout(() => { setMonState("idle"); if (!endedRef.current) enemyPhase(); }, 800);
   }
 
   function applySkill(skill) {
@@ -358,7 +357,7 @@ export default function TurnBattle({
         if (endedRef.current) return;
         enemyDamage(act.per || 1, `${monster.name} の連続こうげき（${i + 1}/${hits}）`);
         i++;
-        if (i < hits && !endedRef.current) setTimeout(doHit, 240);
+        if (i < hits && !endedRef.current) setTimeout(doHit, 340);
         else { if (justGuard) justGuardCounter(); afterEnemy(); }
       };
       doHit();
@@ -447,8 +446,8 @@ export default function TurnBattle({
       if (immSleepRef.current > 0) immSleepRef.current -= 1;
       if (immPoisonRef.current > 0) immPoisonRef.current -= 1;
       refreshTags();
-      if (!endedRef.current) setTimeout(startTurn, 220);
-    }, 320);
+      if (!endedRef.current) setTimeout(startTurn, 350);
+    }, 500);
   }
 
   // ============ 勝敗 ============
@@ -510,7 +509,7 @@ export default function TurnBattle({
   return (
     <div className={"battle-app" + (hurt ? " bt-screen-shake" : "")}>
       <div className="encounter-flash" />
-      {phase === "intro" && <BigWord text="START!" color="#7fff7f" onDone={() => startTurn()} />}
+      {phase === "intro" && <BigWord text="START!" color="#7fff7f" onDone={() => { phaseRef.current = "command"; startTurn(); }} />}
       <StarField /><div className="bt-moon" />
       {hurt && <div className="bt-damage-overlay show" />}
       {skillFx && (
@@ -592,6 +591,34 @@ export default function TurnBattle({
           <span className="bt-sp-num">{sp}/{maxSp}</span>
         </div>
 
+        {/* ===== 行動選択フェーズ ===== */}
+        {phase === "command" && (
+          <div className="bt-q-panel">
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#cceebb", marginBottom: 8 }}>▶ 行動をえらぼう（正解すると成功！ 敵も動くよ）</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800 }} onClick={() => chooseAction("attack")}>⚔️ こうげき</button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: sp >= ULT_COST ? "#f472b6" : undefined, opacity: sp >= ULT_COST ? 1 : 0.5 }} onClick={() => chooseAction("ultimate")}>💥 必殺技 <span style={{ fontSize: 10 }}>({ULT_COST}SP・{ULT_MULT}倍)</span></button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800 }} onClick={() => chooseAction("guard")}>🛡️ ぼうぎょ <span style={{ fontSize: 10 }}>(被ダメ半分)</span></button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: showSkills ? "#38bdf8" : undefined }} onClick={() => setShowSkills((v) => !v)}>✨ スキル ▾</button>
+            </div>
+            {showSkills && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
+                {skillList.map((s) => {
+                  const ready = sp >= s.cost;
+                  return (
+                    <button key={s.id} className="bt-choice" data-sfx="none" disabled={!ready}
+                      onClick={() => chooseAction("skill", s)} title={s.desc}
+                      style={{ padding: "9px 6px", fontSize: 12, fontWeight: 800, opacity: ready ? 1 : 0.45, borderColor: ready ? s.color : undefined }}>
+                      {s.icon} {s.name} <span style={{ fontSize: 10 }}>({s.cost}SP)</span>
+                      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.85, marginTop: 2 }}>{s.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===== 睡眠ターン ===== */}
         {phase === "sleep" && (
           <div className="bt-q-panel" style={{ textAlign: "center" }}>
@@ -609,45 +636,8 @@ export default function TurnBattle({
                 <div className="bt-timer-fill" style={{ width: timePct + "%", background: timePct > 40 ? "#4ade80" : timePct > 20 ? "#fbbf24" : "#f87171" }} />
               </div>
               <span style={{ fontSize: 13, fontWeight: 900, color: "#cceebb", minWidth: 28, textAlign: "right" }}>{timer}</span>
-              <span style={{ fontSize: 12, fontWeight: 900, color: pending?.type === "attack" ? "#cceebb" : "#fde047" }}>{pending?.label || "⚔️ こうげき"}</span>
+              {pending && <span style={{ fontSize: 12, fontWeight: 900, color: "#fde047" }}>{pending.label}</span>}
             </div>
-
-            {/* ===== 作戦バー（任意）：解けば既定＝こうげき。大技予告のときだけ防御などを選ぶ ===== */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-              {[
-                { type: "attack", label: "⚔️", title: "こうげき（既定）", on: pending?.type === "attack", ok: true, col: "#cceebb" },
-                { type: "guard", label: "🛡️", title: "ぼうぎょ（被ダメ半分）", on: pending?.type === "guard", ok: true, col: "#60a5fa" },
-                { type: "ultimate", label: `💥${ULT_MULT}倍`, title: `必殺技（SP${ULT_COST}・${ULT_MULT}倍）`, on: pending?.type === "ultimate", ok: sp >= ULT_COST, col: "#f472b6" },
-              ].map((b) => (
-                <button key={b.type} data-sfx="none" title={b.title} disabled={lockedRef.current || !b.ok}
-                  onClick={() => armAction(b.type)}
-                  style={{ flex: 1, padding: "8px 4px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-                    fontSize: 13, fontWeight: 900, color: "#fff",
-                    border: b.on ? `2px solid ${b.col}` : "1px solid rgba(255,255,255,.18)",
-                    background: b.on ? `${b.col}26` : "rgba(255,255,255,.06)", opacity: b.ok ? 1 : 0.4 }}>{b.label}</button>
-              ))}
-              <button data-sfx="none" title="スキル" disabled={lockedRef.current}
-                onClick={() => armAction("skill")}
-                style={{ flex: 1, padding: "8px 4px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-                  fontSize: 13, fontWeight: 900, color: "#fff",
-                  border: pending?.type === "skill" ? "2px solid #38bdf8" : showSkills ? "2px solid #38bdf8" : "1px solid rgba(255,255,255,.18)",
-                  background: pending?.type === "skill" ? "#38bdf826" : "rgba(255,255,255,.06)" }}>✨{showSkills ? "▴" : "▾"}</button>
-            </div>
-            {showSkills && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-                {skillList.map((s) => {
-                  const ready = sp >= s.cost;
-                  return (
-                    <button key={s.id} className="bt-choice" data-sfx="none" disabled={!ready || lockedRef.current}
-                      onClick={() => armAction("skill", s)} title={s.desc}
-                      style={{ padding: "8px 6px", fontSize: 12, fontWeight: 800, opacity: ready ? 1 : 0.45, borderColor: ready ? s.color : undefined }}>
-                      {s.icon} {s.name} <span style={{ fontSize: 10 }}>({s.cost}SP)</span>
-                      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.85, marginTop: 2 }}>{s.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
             <div className="bt-q-panel">
               {q ? (
                 <>
