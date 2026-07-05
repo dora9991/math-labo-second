@@ -190,9 +190,36 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
   const curText = state.done ? "よくがんばったね！これでこの問題の説明はおしまい。"
     : node?.type === "check" ? node.question : (beats[beat] ?? node?.text ?? "");
 
+  // LINE風のチャットログ（先生の一言・自分の答えが吹き出しで残っていく）
+  const [chat, setChat] = useState([]);
+  const chatRef = useRef(null);
+  const chatKey = useRef(0);
+  const initRef = useRef(false);
+  // 直前と同じ吹き出しは足さない（連打などで同じ一言が重複するのを防ぐ）
+  const pushChat = (who, text) => {
+    if (!text) return;
+    setChat((c) => {
+      const last = c[c.length - 1];
+      if (last && last.who === who && last.text === text) return c;
+      return [...c, { who, text, k: (chatKey.current += 1) }];
+    });
+  };
+  // その状態で「今見えるべき先生の一言」を吹き出しに足す（explain=先頭ビート／check=問い／done=しめ）
+  const showNode = (s) => {
+    const n = currentNode(tm, s);
+    if (s.done) { pushChat("t", "よくがんばったね！これでこの問題の説明はおしまい。"); return; }
+    if (!n) return;
+    pushChat("t", n.type === "check" ? n.question : (splitBeats(n.text)[0] || n.text));
+  };
+
+  // 初回：最初の一言を出す
+  useEffect(() => { if (initRef.current) return; initRef.current = true; showNode(state); /* eslint-disable-next-line */ }, []);
+
   useEffect(() => {
     if (boardRef.current) boardRef.current.scrollTop = boardRef.current.scrollHeight;
   }, [state.board.length]);
+  // 新しい吹き出しが増えたら一番下へスクロール
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [chat.length]);
 
   // ノードが変わったら一言の位置をリセット
   useEffect(() => { setBeat(0); }, [state.nodeId]);
@@ -205,19 +232,29 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.nodeId, beat, voiceOn, state.done]);
 
+  // 「つづき」：同じノードの次の一言へ。最後なら次のノードへ。どちらも吹き出しを足す。
+  const nextBeat = () => {
+    if (!lastBeat) { const nb = beat + 1; setBeat(nb); pushChat("t", beats[nb]); }
+    else { const ns = advanceExplain(tm, state); setState(ns); setBeat(0); showNode(ns); }
+  };
+
   const choose = (i) => {
     if (picked != null) return;
     setPicked(i);
-    // これが2回目の誤答（＝この直後 forcedPass で先へ進む）なら、学び直しノートへ登録する。
-    //  「授業で間違えた→なおすに出る」を繋ぐ。unitIdはsubunit名からの近似解決（resolveUnitId）。
+    pushChat("me", String(node.choices[i])); // 自分の答えを右側の吹き出しに
+    // これが2回目の誤答なら、学び直しノートへ登録（授業で間違えた→なおすに出る）。
     if (node?.type === "check" && i !== node.correct && (state.wrongCounts?.[node.id] || 0) >= 1) {
       const unitId = resolveUnitId(chapterId, problem.subunit);
       onMistake?.({ q: node.question, ans: String(node.choices[node.correct]), unitId, chapterId });
     }
-    setTimeout(() => { setState((s) => answerCheck(tm, s, i)); setPicked(null); }, 550);
+    const correct = i === node.correct;
+    setTimeout(() => {
+      pushChat("t", correct ? "せいかい！ 👏" : "おしい！ もう一度いっしょに見よう");
+      const ns = answerCheck(tm, state, i);
+      setState(ns); setBeat(0); setPicked(null);
+      showNode(ns);
+    }, 600);
   };
-
-  const teacherFace = state.done ? "🎉" : (node?.type === "check") ? "🤔" : "🧑‍🏫";
 
   return (
     <div className="app">
@@ -253,20 +290,17 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
             ))}
           </div>
 
-          {/* 右：先生（今の一言だけを大きく・短く。長文の壁にしない＝案A/B） */}
-          <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ textAlign: "center", fontSize: 64, lineHeight: 1, filter: "drop-shadow(0 4px 10px rgba(0,0,0,.4))" }}>{teacherFace}</div>
-            <div className="glass" style={{ flex: 1, padding: 14, display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}>
-                <span style={{ fontSize: 10, fontWeight: 900, color: "#a5b4fc" }}>先生</span>
-                {/* 一言の進み具合（ドット） */}
-                {beats.length > 1 && (
-                  <span style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
-                    {beats.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: i <= beat ? "#a5b4fc" : "rgba(255,255,255,.2)" }} />)}
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.7, letterSpacing: ".01em" }}>{curText}</div>
+          {/* 右：LINE風のチャット。先生の一言・自分の答えが吹き出しで残っていく */}
+          <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div ref={chatRef} className="glass" style={{ flex: 1, minHeight: 0, padding: "12px 10px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 9 }}>
+              {chat.map((m) => (m.who === "me" ? (
+                <div key={m.k} style={{ alignSelf: "flex-end", maxWidth: "82%", background: "#86efac", color: "#052e16", borderRadius: "14px 14px 3px 14px", padding: "8px 11px", fontSize: 14.5, fontWeight: 800, animation: "fadeUp .28s both" }}>{m.text}</div>
+              ) : (
+                <div key={m.k} style={{ alignSelf: "flex-start", display: "flex", gap: 6, maxWidth: "94%", animation: "fadeUp .28s both" }}>
+                  <span style={{ fontSize: 22, flexShrink: 0, lineHeight: 1.2 }}>🧑‍🏫</span>
+                  <div style={{ background: "rgba(255,255,255,.13)", color: "#fff", borderRadius: "14px 14px 14px 3px", padding: "9px 12px", fontSize: 14.5, fontWeight: 600, lineHeight: 1.65 }}>{m.text}</div>
+                </div>
+              )))}
             </div>
           </div>
         </div>
@@ -297,8 +331,7 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
               ))}
             </div>
           ) : (
-            <button className="nb-btn"
-              onClick={() => { if (!lastBeat) setBeat((b) => b + 1); else setState((s) => advanceExplain(tm, s)); }}
+            <button className="nb-btn" onClick={nextBeat}
               style={{ width: "100%", background: "linear-gradient(135deg,#6366f1,#818cf8)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
               {lastBeat ? "次へ →" : "▽ つづき"}
             </button>
