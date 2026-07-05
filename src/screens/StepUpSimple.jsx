@@ -13,6 +13,8 @@ import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, makeChoices } from "../engine/generator.js";
+import { genSeisuToketa, hasToketaSeisu } from "../data/toketa/seisu.js";
+import ToketaHint from "../components/ToketaHint.jsx";
 import { isCorrect } from "../engine/scoring.js";
 import ResultReview from "../components/ResultReview.jsx";
 
@@ -24,7 +26,8 @@ const POINT_PER_CORRECT = 10;
 // 選択肢・判定（TimeAttackと同じ方針：choicesを持つ問題は式の4択＝文字列一致）
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
 const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
-const choicesFor = (q) => hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans);
+const choicesFor = (q) => (q?.toketa && Array.isArray(q.distractors) ? shuffle(q.distractors.map((d) => String(d.val)))
+  : hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans));
 const ansEq = (val, q) => hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans);
 
 export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList, failAction = null, passActions = null }) {
@@ -55,7 +58,8 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
     for (let i = 0; i < 14; i++) {
       const unit = units[Math.floor(Math.random() * units.length)];
       const level = LEVELS[Math.floor(Math.random() * LEVELS.length)];
-      const problem = genProblem(unit, level, recentRef.current);
+      // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ従来生成。
+      const problem = (hasToketaSeisu(unit.id) && genSeisuToketa(unit.id)) || genProblem(unit, level, recentRef.current);
       if (problem) {
         recentRef.current = [...recentRef.current, problem.id].slice(-6);
         setCur({ unit, level, problem });
@@ -243,6 +247,8 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
 
         <div className="glass" style={{ padding: 20, textAlign: "center" }}>
           <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 0.5, marginBottom: 16 }}><QuestionText text={problem.q} furigana={!!player.furigana} readAloud={!!player.readAloud} /></div>
+          {/* とけた式ヒント（正負・回答前のみ）：つまづき選択→対比→お手本 */}
+          {problem.toketa && !fb && <div style={{ textAlign: "left" }}><ToketaHint problem={problem} /></div>}
           <div style={{ position: "relative" }}>
             {showRing && <div className="correct-ring show" />}
             <div className={"choices-grid" + (shakeAns ? " answer-shake" : "")}>
