@@ -15,7 +15,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
-  onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitPractice, onUnitBattle, onDiagnose,
+  onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitTeacher, onUnitPractice, onUnitBattle, onDiagnose,
   onDetail, onCharacter, onTeacherMode,
 }) {
   const availGrades = gradesWithChapters();
@@ -96,7 +96,7 @@ export default function Home({
           </span>
         </button>
         {cycleOpen && (
-          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
+          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onTeacher={onUnitTeacher} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
         )}
 
         {/* 弱点克服モード（学習サイクルの外・自分の学び直し一覧をまとめて見る） */}

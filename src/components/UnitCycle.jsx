@@ -20,10 +20,11 @@ function lectureCleared(unitId, haichiPassed) {
 
 const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
+export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onTeacher, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
+  const [lect, setLect] = useState(null); // 講義選択中の unitId（はいち/教師モードをえらぶ）
   const ch = chapters[Math.min(ci, Math.max(0, chapters.length - 1))];
   if (!ch) return null;
   const units = ch.units || [];
@@ -131,11 +132,23 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               <div style={{ fontSize: 9.5, fontWeight: 800, color: "#86efac", margin: "-2px 0 6px" }}>💯 間違いゼロ！「なおす」は直すところなし</div>
             ) : null}
 
-            {!lectureC ? (
-              // ① まずは講義（動画＋確認問題）。確認問題ぜんぶ正解で「ためす」が出る。
+            {lect === u.id ? (
+              // 講義のえらび：はいち動画 or 教師モード（どちらで学ぶ？）
+              <>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {stepBtn(() => { setLect(null); onHaichi?.(u); }, "📺 はいち動画", "linear-gradient(135deg,#ef4444,#dc2626)", false, "葉一さんの動画＋プリントで学ぶ")}
+                  {stepBtn(() => { setLect(null); onTeacher?.(u); }, "🧑‍🏫 教師モード", "linear-gradient(135deg,#8b5cf6,#6366f1)", false, "黒板と会話で1問ずつ教わる")}
+                  {stepBtn(() => setLect(null), "← もどる", "rgba(255,255,255,.12)")}
+                </div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
+                  どちらかで学んだら「確認問題」で講義クリア！
+                </div>
+              </>
+            ) : !lectureC ? (
+              // ① まずは講義（はいち動画 or 教師モードをえらぶ）。確認問題ぜんぶ正解で「ためす」が出る。
               <>
                 <div style={{ display: "flex" }}>
-                  {stepBtn(() => onHaichi?.(u), "📺 講義（動画＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)}
+                  {stepBtn(() => setLect(u.id), "📺 講義（動画・教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)}
                 </div>
                 <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
                   確認問題ぜんぶ正解すると「✏️ ためす」が出るよ
@@ -149,7 +162,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               </div>
             ) : (
               <div style={{ display: "flex", gap: 6 }}>
-                {stepBtn(() => onHaichi?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
+                {stepBtn(() => setLect(u.id), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                 {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
                 {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
                 {stepBtn(() => onChallenge?.(), "🧮 応用",

@@ -129,6 +129,7 @@ export default function App() {
   const [calcKingClear, setCalcKingClear] = useState(null); // 計算王クリア演出（バトル攻撃力アップ）
   const [newMonster, setNewMonster] = useState(null); // 新モンスター出現演出（タイムアタックで解放）
   const [relearnFocus, setRelearnFocus] = useState(null); // 学び直しを1単元にしぼる（サイクルのなおす由来）。null=弱点克服モード（全部）
+  const [teacherFocus, setTeacherFocus] = useState(null); // 講義→教師モードで開いた単元 { chapterId, unit }。null=通常の教師モード
   const [weakKey, setWeakKey] = useState(0); // 苦手タイムアタックの再挑戦（もう一回）でリセットする用
   const [practiceUnit, setPracticeUnit] = useState(null); // 間違いノートの単元別じっくり練習で選んだ単元
   const [calcChapter, setCalcChapter] = useState(null); // 計算王への道で選んだ単元（章）
@@ -172,6 +173,19 @@ export default function App() {
     });
     setHaichiStudio({ ...found, ret });
     setScreen("haichiStudio");
+  }
+
+  // 教師モードの中から「確認問題」へ直行（講義クリア用）。終わったら教師モードに戻す。
+  function goConfirmQuiz(unit, ret = "teacherMode") {
+    const found = unit && findHaichiLessonForUnit(unit.id);
+    if (!found) return;
+    if (unit?.id) updatePlayer((p) => {
+      const cyc = { ...(p.cycle || {}) };
+      cyc[unit.id] = { practiceN: 0, relearnN: 0, appliedN: 0, done: false, ...(cyc[unit.id] || {}), lecture: true };
+      return { ...p, cycle: cyc, cycleLast: unit.id };
+    });
+    setHaichiStudio({ ...found, ret });
+    setScreen("haichiStudioPractice");
   }
 
   // 周回（プレステージ）：その学年の魔王を「今の周回で」倒したか
@@ -1331,7 +1345,11 @@ export default function App() {
   if (screen === "teacherMode") {
     return (
       <Suspense fallback={<div className="app"><div className="content"><div className="glass" style={{ padding: 20, textAlign: "center" }}>読み込み中…</div></div></div>}>
-        <TeacherMode player={data.player} onBack={() => setScreen("home")} onMistake={recordWrongAnswer} />
+        <TeacherMode player={data.player} onBack={() => setScreen("home")} onMistake={recordWrongAnswer}
+          focusChapterId={teacherFocus?.chapterId || null}
+          focusUnit={teacherFocus?.unit || null}
+          onConfirmQuiz={(unit) => goConfirmQuiz(unit, "teacherMode")}
+        />
       </Suspense>
     );
   }
@@ -1839,9 +1857,10 @@ export default function App() {
       onRelearn={(unit) => { setRelearnFocus(unit?.id || null); setScreen("relearn"); }}
       onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}
       onDialogue={() => setScreen("dialogue")}
-      onTeacherMode={() => setScreen("teacherMode")}
+      onTeacherMode={() => { setTeacherFocus(null); setScreen("teacherMode"); }}
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}
+      onUnitTeacher={(unit) => { const ch = findChapterByUnitId(unit.id); setTeacherFocus({ chapterId: ch?.id || null, unit }); setScreen("teacherMode"); }}
       onDiagnose={(ch) => { setDiagnoseChapter(ch); setScreen("diagnose"); }}
       onUnitPractice={(chapter, unit) => { setSel({ chapter, unit, level: "standard", nav: true }); setScreen("anshin"); }}
       onUnitBattle={(unit) => goBattleForUnit(unit)}

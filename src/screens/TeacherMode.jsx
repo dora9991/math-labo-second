@@ -63,14 +63,18 @@ const LINE_STYLE = {
   result: { color: "#86efac", fontWeight: 900, fontSize: 19 },
 };
 
-export default function TeacherMode({ player, onBack, onMistake }) {
-  const [unitKey, setUnitKey] = useState(null);
+export default function TeacherMode({ player, onBack, onMistake, focusChapterId = null, focusUnit = null, onConfirmQuiz = null }) {
+  // 講義から「教師モード」を選んで開いたときは、その単元のファイルを直接ひらく（単元えらびを飛ばす）。
+  const initialKey = focusChapterId ? (UNIT_FILES.find((u) => u.chapterId === focusChapterId)?.key || null) : null;
+  const [unitKey, setUnitKey] = useState(initialKey);
   const [problem, setProblem] = useState(null);
+  // 確認問題へ進むボタン（講義クリア用）。focusUnit があるとき（＝講義から来たとき）だけ出す。
+  const confirmBtn = focusUnit && onConfirmQuiz ? { unit: focusUnit, go: () => onConfirmQuiz(focusUnit) } : null;
 
   if (!unitKey) return <UnitPicker player={player} onPick={setUnitKey} onBack={onBack} />;
-  if (!problem) return <ProblemPicker player={player} unitKey={unitKey} onPick={setProblem} onBack={() => setUnitKey(null)} />;
+  if (!problem) return <ProblemPicker player={player} unitKey={unitKey} onPick={setProblem} onBack={initialKey ? onBack : () => setUnitKey(null)} confirmBtn={confirmBtn} />;
   const chapterId = UNIT_FILES.find((u) => u.key === unitKey)?.chapterId || null;
-  return <Board player={player} problem={problem} chapterId={chapterId} onMistake={onMistake} onExit={() => setProblem(null)} />;
+  return <Board player={player} problem={problem} chapterId={chapterId} onMistake={onMistake} onExit={() => setProblem(null)} confirmBtn={confirmBtn} />;
 }
 
 // ── ① 単元えらび ──────────────────────────────────────
@@ -102,7 +106,7 @@ function UnitPicker({ player, onPick, onBack }) {
 }
 
 // ── ② 問題えらび（小単元でグループ化した一覧） ─────────────
-function ProblemPicker({ player, unitKey, onPick, onBack }) {
+function ProblemPicker({ player, unitKey, onPick, onBack, confirmBtn = null }) {
   const [data, setData] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -132,6 +136,13 @@ function ProblemPicker({ player, unitKey, onPick, onBack }) {
       <div className="content">
         <div style={{ fontSize: 15, fontWeight: 900, margin: "10px 0 4px" }}>{data.unit}</div>
         <div style={{ fontSize: 11.5, opacity: .6, marginBottom: 10 }}>{data.count}問。小単元をえらんで、そこから1問えらぼう。</div>
+        {/* 講義から来たとき：先生の説明を見たら「確認問題」で講義クリアへ */}
+        {confirmBtn && (
+          <button data-sfx="none" onClick={confirmBtn.go} style={{ width: "100%", margin: "0 0 12px", padding: "12px", borderRadius: 12, cursor: "pointer",
+            border: "none", background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff", fontWeight: 900, fontSize: 14 }}>
+            ✅ 確認問題にすすむ（講義クリア）
+          </button>
+        )}
         {Object.entries(groups).map(([subunit, items]) => (
           <details key={subunit} style={{ marginBottom: 8 }}>
             <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 800, padding: "8px 4px", color: "#c7d2fe" }}>
@@ -155,7 +166,7 @@ function ProblemPicker({ player, unitKey, onPick, onBack }) {
 }
 
 // ── ③ 黒板＋先生（ノードグラフ再生） ───────────────────────
-function Board({ player, problem, chapterId, onMistake, onExit }) {
+function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = null }) {
   const tm = problem.teacher_mode;
   const [state, setState] = useState(() => startTeacherMode(tm));
   const [voiceOn, setVoiceOn] = useState(true);
@@ -196,8 +207,8 @@ function Board({ player, problem, chapterId, onMistake, onExit }) {
     <div className="app">
       <Header player={player} />
       <div className="content" style={{ maxWidth: 880, display: "flex", flexDirection: "column", height: "calc(100dvh - 64px)" }}>
+        {/* 上段：問題文（左）＋声＋「戻る」を右上に置く */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <button className="back-btn" onClick={onExit}>← 問題えらび</button>
           <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 900, color: "#fef9c3",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             📌 {problem.problem_text}
@@ -207,6 +218,7 @@ function Board({ player, problem, chapterId, onMistake, onExit }) {
               {voiceOn ? "🔊 声ON" : "🔇 声OFF"}
             </button>
           )}
+          <button className="back-btn" onClick={onExit}>問題えらび →</button>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
@@ -243,9 +255,16 @@ function Board({ player, problem, chapterId, onMistake, onExit }) {
 
         <div style={{ marginTop: 10 }}>
           {state.done ? (
-            <button className="nb-btn" onClick={onExit} style={{ background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
-              🎉 おわり！ ほかの問題をえらぶ
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {confirmBtn && (
+                <button className="nb-btn" onClick={confirmBtn.go} style={{ background: "linear-gradient(135deg,#0ea5e9,#6366f1)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
+                  ✅ 確認問題にすすむ（講義クリア）
+                </button>
+              )}
+              <button className="nb-btn" onClick={onExit} style={{ background: "linear-gradient(135deg,#22c55e,#10b981)", color: "#fff", fontWeight: 900, fontSize: 15, padding: 14 }}>
+                🎉 おわり！ ほかの問題をえらぶ
+              </button>
+            </div>
           ) : node?.type === "check" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {node.choices.map((c, i) => (

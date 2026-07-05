@@ -18,11 +18,11 @@ export const ULT_MULT_UP = 5;
 //   cost … 発動SP（正解して初めて発動＝SP消費。失敗時は消費しない）
 //   kind … TurnBattle が解釈する効果種別
 export const TURN_SKILLS = [
-  { id: "heal",       name: "かいふく",   icon: "💚", color: "#4ade80", cost: 3, kind: "heal",       value: 3, desc: "HP（ハート）を3回復" },
-  { id: "guard1",     name: "ダメ軽減",   icon: "🛡️", color: "#60a5fa", cost: 3, kind: "reduce",     turns: 2, amt: 1, desc: "2ターン 受けるダメージ −1" },
-  { id: "barrier",    name: "バリア",     icon: "🔰", color: "#93c5fd", cost: 5, kind: "nullifyOnce", desc: "次の1回だけダメージ無効" },
-  { id: "antisleep",  name: "めざまし",   icon: "⏰", color: "#38bdf8", cost: 4, kind: "immSleep",   turns: 5, desc: "5ターン 眠らない" },
-  { id: "antipoison", name: "どく消し",   icon: "🧪", color: "#a3e635", cost: 3, kind: "immPoison",  turns: 5, desc: "毒を消す＋5ターン毒無効" },
+  { id: "heal",       name: "かいふく",   icon: "💚", color: "#4ade80", cost: 1, kind: "heal",       value: 5, desc: "HP（ハート）を5回復" },
+  { id: "guard1",     name: "ダメ軽減",   icon: "🛡️", color: "#60a5fa", cost: 2, kind: "reduce",     turns: 2, amt: 1, desc: "2ターン 受けるダメージ −1" },
+  { id: "barrier",    name: "バリア",     icon: "🔰", color: "#93c5fd", cost: 3, kind: "nullifyOnce", desc: "次の1回だけダメージ無効" },
+  { id: "antisleep",  name: "めざまし",   icon: "⏰", color: "#38bdf8", cost: 2, kind: "immSleep",   turns: 5, desc: "5ターン 眠らない" },
+  { id: "antipoison", name: "どく消し",   icon: "🧪", color: "#a3e635", cost: 2, kind: "immPoison",  turns: 5, desc: "毒を消す＋5ターン毒無効" },
 ];
 
 export function findTurnSkill(id) {
