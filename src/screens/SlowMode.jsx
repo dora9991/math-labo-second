@@ -19,7 +19,7 @@ import QuestionText from "../components/QuestionText.jsx";
 import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, makeChoices } from "../engine/generator.js";
-import { genSeisuToketa, hasToketaSeisu } from "../data/toketa/seisu.js";
+import { genToketa, hasToketa } from "../data/toketa/index.js";
 import ToketaHint from "../components/ToketaHint.jsx";
 import { isCorrect, SLOW_TARGET, xpRepeatMultiplier, CYCLE_PRACTICE_TARGET, slowPointsForLevel } from "../engine/scoring.js";
 import { initDifficulty, nextDifficulty, PRACTICE_LEVELS } from "../engine/progress.js";
@@ -40,8 +40,8 @@ const ansEq = (val, q) => (hasChoices(q) ? String(val).replace(/\s/g, "") === St
 
 // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ従来の生成。
 function genPractice(unit, level, lastId) {
-  if (unit && hasToketaSeisu(unit.id)) {
-    const t = genSeisuToketa(unit.id);
+  if (unit && hasToketa(unit.id)) {
+    const t = genToketa(unit.id);
     if (t) return t;
   }
   return genProblem(unit, level, lastId);

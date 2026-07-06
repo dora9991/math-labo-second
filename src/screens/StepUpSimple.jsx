@@ -13,7 +13,7 @@ import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
 import * as sfx from "../audio/sfx.js";
 import { genProblem, genProblemSeeded, makeChoices } from "../engine/generator.js";
-import { genSeisuToketa, hasToketaSeisu } from "../data/toketa/seisu.js";
+import { genToketa, hasToketa } from "../data/toketa/index.js";
 import ToketaHint from "../components/ToketaHint.jsx";
 import { isCorrect } from "../engine/scoring.js";
 import ResultReview from "../components/ResultReview.jsx";
@@ -58,8 +58,8 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
     for (let i = 0; i < 14; i++) {
       const unit = units[Math.floor(Math.random() * units.length)];
       const level = LEVELS[Math.floor(Math.random() * LEVELS.length)];
-      // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ seed 付き生成（サーバー採点の下地）。
-      const problem = (hasToketaSeisu(unit.id) && genSeisuToketa(unit.id)) || genProblemSeeded(unit, level, recentRef.current);
+      // 中1の toketa 対応単元はヒント付き問題に差し替え。無ければ seed 付き生成（サーバー採点の下地）。
+      const problem = (hasToketa(unit.id) && genToketa(unit.id)) || genProblemSeeded(unit, level, recentRef.current);
       if (problem) {
         recentRef.current = [...recentRef.current, problem.id].slice(-6);
         setCur({ unit, level, problem });

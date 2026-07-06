@@ -308,7 +308,7 @@ export default function App() {
 
     // 7) 新モンスター出現の通知。レベルアップがあれば演出の後、無ければ少し後に出す
     // 正負(c1)は「出現！」ポップアップを出さない（ためすから直接その敵と戦えるため冗長）。
-    if (unlockedMon && unlockedMon.chapterId !== "c1") {
+    if (unlockedMon && (unlockedMon.grade ?? 1) !== 1) {
       if (willLevelUp) {
         pendingMonsterRef.current = unlockedMon; // レベルアップ演出の onDone で出す
       } else {
@@ -404,7 +404,7 @@ export default function App() {
       if (monster && !isUnitMonsterUnlocked(data.player, monster)) {
         markMonstersSeen([monster.id]);
         // 正負(c1)は「出現！」ポップアップを出さない
-        if (monster.chapterId !== "c1") setTimeout(() => setNewMonster(monster), 900);
+        if ((monster.grade ?? 1) !== 1) setTimeout(() => setNewMonster(monster), 900);
       }
     }
   }
@@ -577,10 +577,10 @@ export default function App() {
       // スキル動線をオフにしたため、クリスタル入手演出は出さない（クリスタルは内部で貯まるだけ）。
       if (newLevel != null) setTimeout(() => setLevelUpTo(newLevel), 1000);
       // #4 有能感のピーク（サイクル初クリア）に「応用の扉」を出す。レベルアップ演出の後に表示。
-      //  ※正負(c1)は祝いモーダルを出さず、サイクル内の「🧮 応用」ボタンで誘導する（ためすクリアで強調）。
+      //  ※中1は祝いモーダルを出さず、サイクル内の「🧮 応用」ボタンで誘導する（ためすクリアで強調）。
       const clearedChapter = findChapterByUnitId(unitId);
       const clearedUnit = findUnitById(unitId);
-      if (clearedChapter && clearedChapter.id !== "c1") {
+      if (clearedChapter && (clearedChapter.grade ?? 1) !== 1) {
         pendingApplyGateRef.current = { chapterId: clearedChapter.id, chapterName: clearedChapter.name, unitName: clearedUnit?.name || "" };
       }
     } else if (wasCleared) {
@@ -1758,7 +1758,7 @@ export default function App() {
     }
     // 正の数・負の数(c1)のモンスターは「行動選択型バトル(v2)」で試作。他は従来バトル。
     const maxHearts = Math.min(13, 5 + new Set((data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win" && /^boss_/.test(r.extra?.monsterId || "")).map((r) => r.extra.monsterId)).size);
-    const useTurnBattle = battleMonster && (battleMonster.grade ?? 1) === 1 && battleMonster.chapterId === "c1";
+    const useTurnBattle = battleMonster && (battleMonster.grade ?? 1) === 1; // 中1は全章 行動選択型バトルへ
     if (useTurnBattle) {
       return (
         <TurnBattle

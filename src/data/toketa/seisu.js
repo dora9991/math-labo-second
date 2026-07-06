@@ -205,3 +205,7 @@ export function genSeisuToketa(unitId) {
     viz: p.viz || null, unitId, toketa: true,
   };
 }
+
+// 統一インターフェース（ディスパッチャ index.js 用。他章と同じ名前）
+export const has = hasToketaSeisu;
+export const gen = genSeisuToketa;

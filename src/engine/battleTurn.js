@@ -48,17 +48,18 @@ export const TURN_ENEMY_PATTERNS = {
   poison: { id: "poison", name: "どく型",     icon: "☠️", desc: "たまに どくにする" },
 };
 
-// 正負(c1)モンスターにパターンを割り当てて、6種すべてを体験できるようにする。
-//   sample/u1 = こうげき、u2 = ためる、u3 = ねむり、u4 = まもり、u5 = 連続、u6 = どく。
-//   章ボスは「ためる型（強）」。それ以外/フォールバックは attack。
-const C1_PATTERN_BY_UNIT = {
-  u1: "attack", u2: "charge", u3: "sleep", u4: "guard", u5: "multi", u6: "poison",
-};
+// 中1の各単元モンスターに6種のパターンを「単元の末尾番号」で循環割り当て。
+//   例: u1/v1/e1…=こうげき、2=ためる、3=ねむり、4=まもり、5=連続、6=どく。
+//   → c1(u1〜u6)は従来と同じ割当のまま、c2〜c7へも同じ規則で広がる。
+//   章ボスは「ためる型（強）」。sample/番号なしは attack。
+const PATTERN_CYCLE = ["attack", "charge", "sleep", "guard", "multi", "poison"];
 export function patternForMonster(monster) {
   if (!monster) return "attack";
   if (monster.kind === "sample") return "attack";
   if (monster.kind === "chapterBoss") return "charge";
-  return C1_PATTERN_BY_UNIT[monster.unitId] || "attack";
+  const m = String(monster.unitId || "").match(/(\d+)$/);
+  const n = m ? parseInt(m[1], 10) : 1;
+  return PATTERN_CYCLE[(n - 1) % PATTERN_CYCLE.length];
 }
 
 // ── ボス2段階変身 ──────────────────────────────────

@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 import MathText from "./MathText.jsx";
 import { SYM, CONTRAST, hintTags } from "../data/toketa/help.js";
-import { MISC } from "../data/toketa/seisu.js";
+import { MISC } from "../data/toketa/index.js";
 
 const BOX = { background: "#fef9c3", border: "1px solid #fde047", borderRadius: 11, padding: "10px 12px", marginBottom: 11, color: "#854d0e" };
 const PICK = { display: "block", width: "100%", textAlign: "left", margin: "5px 0", padding: "9px 11px", borderRadius: 9, border: "1px solid #fcd34d", background: "#fffbeb", color: "#854d0e", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
