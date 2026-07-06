@@ -21,6 +21,11 @@ export const HAICHI_COURSE = {
       { n: 8, t: "指数", yt: "dSTn1Qy6Pms", pdf: "https://19ch.tv/c1/c1m/c1text/ma/c1m8.pdf", u: ["u4"] },
       { n: 9, t: "計算のまとめ", yt: "6ewwrOBRi90", pdf: "https://19ch.tv/c1/c1m/c1text/ma/c1m9.pdf", u: ["u5"] },
       { n: 10, t: "正負の問題を詰め込んでみた", yt: "t1ApySmI1Xk", pdf: "https://19ch.tv/c1/c1m/c1text/ma/c1m10.pdf", u: ["u5"] },
+      // 素因数分解：新課程で中1へ移動した単元。動画自体はグレード3データ内(式の展開と因数分解)に
+      //  「素数と素因数分解」として既に存在するので、その動画IDを中1用エントリとして再掲する。
+      //  （中3のレッスンをそのまま指すと画面表示が「中3-5」になり、前後送りも中3展開の動画群を
+      //   巡回してしまうため、別エントリにしてn番号も中1側で一意にする＝表示・ナビともに正しく中1）
+      { n: 89, t: "素数と素因数分解", yt: "vvPzcNRqPoc", pdf: "https://19ch.tv/c3/c3m/c3text/ma/c3m5.pdf", u: ["u6"] },
     ] },
     { name: "文字と式", emoji: "🔡", color: "#22c55e", practiceChapter: "c2", lessons: [
       { n: 11, t: "文字を使うときのルール", yt: "5vuOahVVoVs", pdf: "https://19ch.tv/c1/c1m/c1text/ma/c1m11.pdf", u: ["v1"] },
