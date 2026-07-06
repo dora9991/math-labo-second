@@ -24,6 +24,7 @@ const UNIT_FILES = [
   { key: "g2pe", label: "式の計算", emoji: "🔣", color: "#34d399", chapterId: "g2c1" },
   { key: "g2se", label: "連立方程式", emoji: "🔗", color: "#60a5fa", chapterId: "g2c2" },
   { key: "g2lf", label: "一次関数", emoji: "📈", color: "#f59e0b", chapterId: "g2c3" },
+  { key: "g2cg", label: "図形の性質と証明", emoji: "📐", color: "#a78bfa", chapterId: "g2c4" },
 ];
 
 // P0の小単元名(subunit)とアプリの単元(unitId)の対応表は7単元ぶん個別に持たず、
@@ -59,6 +60,7 @@ const UNIT_LOADERS = {
   g2pe: () => import("../data/dialogue/teacherMode/g2pe.json"),
   g2se: () => import("../data/dialogue/teacherMode/g2se.json"),
   g2lf: () => import("../data/dialogue/teacherMode/g2lf.json"),
+  g2cg: () => import("../data/dialogue/teacherMode/g2cg.json"),
 };
 
 // 板書1行の色分け（黒板のチョーク色。DialogueLessonのLINE_STYLEと揃える）
