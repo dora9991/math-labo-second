@@ -115,6 +115,7 @@ export function initialPlayerState(studentId) {
     navLevel: {},      // { unitId: "advanced" } れんしゅうの到達難易度。5問区切りをまたいで引き継ぐ
     tagWrong: {},      // { skillTag: 累計まちがい数 } 同じタグで2問まちがえたら学び直しへ（出したら0に戻す）
     enemyDex: {},      // { monsterId: { enc:遭遇回数, moves:{技kind:true}, defeated:bool } } 敵図鑑（負けても埋まる）
+    noVideoLecturePassed: {}, // { unitId: 日付 } 葉一動画が無い単元の講義クリア（教師モード＋確認問題5問80%で合格）
     partners: {},      // なかま（エサで仲間にしたモンスター）{ monsterId: { lv } }。コイン/クリスタルで育成
     party: [],         // ストック（編成）monsterId配列・最大4体。先頭(activePartner)だけバトル参戦
     activePartner: null, // バトルに参戦する仲間1体のmonsterId（party内の1体）
@@ -158,6 +159,7 @@ export function normalizePlayerState(p) {
   out.navLevel = (p.navLevel && typeof p.navLevel === "object") ? p.navLevel : {};
   out.tagWrong = (p.tagWrong && typeof p.tagWrong === "object") ? p.tagWrong : {};
   out.enemyDex = (p.enemyDex && typeof p.enemyDex === "object") ? p.enemyDex : {};
+  out.noVideoLecturePassed = (p.noVideoLecturePassed && typeof p.noVideoLecturePassed === "object") ? p.noVideoLecturePassed : {};
   out.readAloud = !!p.readAloud; // ★5 設定（既定OFF）
   out.furigana = !!p.furigana;   // ★5 設定（既定OFF）
   out.crystals = Number.isFinite(p.crystals) ? p.crystals : 0;

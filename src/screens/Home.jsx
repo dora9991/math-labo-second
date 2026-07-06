@@ -96,7 +96,7 @@ export default function Home({
           </span>
         </button>
         {cycleOpen && (
-          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onTeacher={onUnitTeacher} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
+          <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} noVideoLecturePassed={player.noVideoLecturePassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onTeacher={onUnitTeacher} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
         )}
 
         {/* 弱点克服モード（学習サイクルの外・自分の学び直し一覧をまとめて見る） */}

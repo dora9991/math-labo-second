@@ -178,16 +178,30 @@ export default function App() {
   }
 
   // 教師モードの中から「確認問題」へ直行（講義クリア用）。終わったら教師モードに戻す。
+  //  対応する葉一動画が無い単元（例：四則混合の複合・確率など）は、教師モードの説明を
+  //  講義がわりとし、その単元から直接5問の確認問題を出す（合格＝markNoVideoLecturePassed）。
   function goConfirmQuiz(unit, ret = "teacherMode") {
-    const found = unit && findHaichiLessonForUnit(unit.id);
-    if (!found) return;
-    if (unit?.id) updatePlayer((p) => {
+    if (!unit?.id) return;
+    const found = findHaichiLessonForUnit(unit.id);
+    updatePlayer((p) => {
       const cyc = { ...(p.cycle || {}) };
       cyc[unit.id] = { practiceN: 0, relearnN: 0, appliedN: 0, done: false, ...(cyc[unit.id] || {}), lecture: true };
       return { ...p, cycle: cyc, cycleLast: unit.id };
     });
-    setHaichiStudio({ ...found, ret });
+    if (found) { setHaichiStudio({ ...found, ret }); }
+    else { setHaichiStudio({ grade: null, section: null, lesson: null, unit, noVideo: true, ret }); }
     setScreen("haichiStudioPractice");
+  }
+
+  // 動画が無い単元の講義クリア（教師モード＋確認問題5問・正答率80%以上）。1回だけ報酬。
+  function markNoVideoLecturePassed(unitId) {
+    if (!unitId || data.player.noVideoLecturePassed?.[unitId]) return;
+    updatePlayer((p) => ({
+      ...p,
+      noVideoLecturePassed: { ...(p.noVideoLecturePassed || {}), [unitId]: todayStr() },
+      coins: (p.coins ?? 0) + HAICHI_PASS_COIN,
+    }));
+    addXp(HAICHI_PASS_XP);
   }
 
   // 周回（プレステージ）：その学年の魔王を「今の周回で」倒したか
@@ -541,10 +555,13 @@ export default function App() {
     if (!unitId || (!practice && !relearn)) return;
     const prev = (data.player.cycle && data.player.cycle[unitId]) || {};
     const next = nextCycleCounts(prev, { practice, relearn }); // 進捗ルールは engine/progress.js に一元化
-    // 講義（確認問題）クリア：その単元の葉一レッスンの合格を見る（レッスンが無ければ自動OK）
+    // 講義（確認問題）クリア：その単元の葉一レッスンの合格を見る。
+    //  レッスンが無い単元（動画なし）は、教師モード＋確認問題での合格(noVideoLecturePassed)を見る。
     const lessonFound = findHaichiLessonForUnit(unitId);
     const lessonKey = lessonFound ? `g${lessonFound.grade}m${lessonFound.lesson.n}` : null;
-    const lectureOK = !lessonFound || !!(data.player.haichiPassed && data.player.haichiPassed[lessonKey]);
+    const lectureOK = lessonFound
+      ? !!(data.player.haichiPassed && data.player.haichiPassed[lessonKey])
+      : !!(data.player.noVideoLecturePassed && data.player.noVideoLecturePassed[unitId]);
     // なおすクリア：学び直しで正解、または直すべき間違いがそもそも無い（詰まり防止）
     const unitHasMistakes = mistakeNow || (data.mistakes || []).some((m) => m.unitId === unitId);
     const naosuOK = naosuSatisfied(next.relearnN, unitHasMistakes);
@@ -1415,6 +1432,35 @@ export default function App() {
         onPractice={(L) => { setHaichiStudio((s) => ({ ...s, lesson: L })); setScreen("haichiStudioPractice"); }}
         onPass={markHaichiPassed}
         onBack={() => setScreen(haichiStudio.ret || "home")}
+      />
+    );
+  }
+
+  // 講義（確認問題）：動画が無い単元は、教師モードの説明を頼りにその単元から直接5問出題し、
+  //  80%で合格＝markNoVideoLecturePassed（講義クリア扱い）。終わったら教師モードへ戻す。
+  if (screen === "haichiStudioPractice" && haichiStudio?.noVideo) {
+    const unit = haichiStudio.unit;
+    const sc = findScaffold(unit, data.player.skillStats || {});
+    const passChapter = findChapterByUnitId(unit.id);
+    return (
+      <StepUpSimple
+        key={"noVideoConfirm-" + unit.id}
+        player={data.player}
+        units={[unit]}
+        title={`確認問題：${unit.name}`}
+        roundSize={5}
+        passRate={80}
+        onAttempt={(a) => recordStepAttempt({ ...a, cycleSkip: true })}
+        onRoundEnd={({ correct, seen }) => { if (seen > 0 && correct / seen >= 0.8) markNoVideoLecturePassed(unit.id); }}
+        onHome={() => setScreen(haichiStudio.ret || "home")}
+        failAction={sc ? {
+          label: `🔍 ここが土台かも：「${sc.skillName}」を3問`,
+          onClick: () => { setScaffold({ ...sc, returnTo: "haichiStudioPractice" }); setScreen("scaffold"); },
+        } : null}
+        passActions={[
+          { label: "✏️ れんしゅう", onClick: () => { setSel({ chapter: passChapter, unit, level: "standard", nav: true }); setScreen("anshin"); } },
+          { label: "⚔️ バトル", onClick: () => goBattleForUnit(unit) },
+        ]}
       />
     );
   }

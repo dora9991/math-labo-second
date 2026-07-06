@@ -12,18 +12,18 @@ import { CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET } from "../engine/scoring.j
 
 // 講義（確認問題）をクリアしたか：その単元に対応する葉一レッスンの key を引いて
 //  haichiPassed（確認問題に合格した動画）に入っているかで判定する。
-//  ※対応する動画が無い単元（例：素因数分解・四則混合の複合・確率）は、講義クリアの
-//   判定しようがないので講義ゲートを自動でスキップする（＝ためす以降にすぐ進める）。
-//   これが無いと、その単元は永久に「講義」から先へ進めなくなる。
-function lectureCleared(unitId, haichiPassed) {
+//  ※対応する動画が無い単元（例：四則混合の複合・確率）は、教師モード＋確認問題での
+//   合格(noVideoLecturePassed)を見る。これが無いと、その単元は永久に「講義」から
+//   先へ進めなくなる（動画が無い＝合格しようがない、を防ぐ）。
+function lectureCleared(unitId, haichiPassed, noVideoLecturePassed) {
   const found = findHaichiLessonForUnit(unitId);
-  if (!found) return true;
+  if (!found) return !!noVideoLecturePassed?.[unitId];
   return !!haichiPassed[`g${found.grade}m${found.lesson.n}`];
 }
 
 const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onTeacher, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
+export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, noVideoLecturePassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onTeacher, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
@@ -79,7 +79,8 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           const relearnN = cyc.relearnN || 0;
           const hasMistakes = mistakeUnitIds.includes(u.id);
           const danger = hasMistakes; // 正答率が落ちた合図＝この単元に未修正の間違いがある（黄色で警告）
-          const lectureC = lectureCleared(u.id, haichiPassed);                         // 講義＝確認問題に合格
+          const lectureC = lectureCleared(u.id, haichiPassed, noVideoLecturePassed);   // 講義＝確認問題に合格
+          const hasVideo = !!findHaichiLessonForUnit(u.id);                            // 動画があるか（無ければ教師モードのみ）
           const tamePct = Math.min(practiceN / CYCLE_PRACTICE_TARGET, 1);              // ためす＝15問でいっぱい
           const tameC = practiceN >= CYCLE_PRACTICE_TARGET;
           // なおす＝「講義・ためすをクリアした上で」直し完了 or 間違いゼロ（先に進む前は未クリア扱い）
@@ -136,22 +137,25 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
             ) : null}
 
             {lect === u.id ? (
-              // 講義のえらび：はいち動画 or 教師モード（どちらで学ぶ？）
+              // 講義のえらび：はいち動画 or 教師モード（どちらで学ぶ？）。動画が無い単元は教師モードのみ。
               <>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {stepBtn(() => { setLect(null); onHaichi?.(u); }, "📺 はいち動画", "linear-gradient(135deg,#ef4444,#dc2626)", false, "葉一さんの動画＋プリントで学ぶ")}
+                  {hasVideo && stepBtn(() => { setLect(null); onHaichi?.(u); }, "📺 はいち動画", "linear-gradient(135deg,#ef4444,#dc2626)", false, "葉一さんの動画＋プリントで学ぶ")}
                   {stepBtn(() => { setLect(null); onTeacher?.(u); }, "🧑‍🏫 教師モード", "linear-gradient(135deg,#8b5cf6,#6366f1)", false, "黒板と会話で1問ずつ教わる")}
                   {stepBtn(() => setLect(null), "← もどる", "rgba(255,255,255,.12)")}
                 </div>
                 <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
-                  どちらかで学んだら「確認問題」で講義クリア！
+                  {hasVideo ? "どちらかで学んだら「確認問題」で講義クリア！" : "教師モードの中の「確認問題」で講義クリア！"}
                 </div>
               </>
             ) : !lectureC ? (
-              // ① まずは講義（はいち動画 or 教師モードをえらぶ）。確認問題ぜんぶ正解で「ためす」が出る。
+              // ① まずは講義。動画がある単元は はいち動画/教師モード をえらぶ、無い単元は教師モードへ直行。
+              //  確認問題ぜんぶ正解で「ためす」が出る。
               <>
                 <div style={{ display: "flex" }}>
-                  {stepBtn(() => setLect(u.id), "📺 講義（動画・教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)}
+                  {hasVideo
+                    ? stepBtn(() => setLect(u.id), "📺 講義（動画・教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)
+                    : stepBtn(() => onTeacher?.(u), "🧑‍🏫 講義（教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#8b5cf6,#6366f1)", false)}
                 </div>
                 <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
                   確認問題ぜんぶ正解すると「✏️ ためす」が出るよ
@@ -165,7 +169,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
               </div>
             ) : (
               <div style={{ display: "flex", gap: 6 }}>
-                {stepBtn(() => setLect(u.id), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
+                {stepBtn(() => hasVideo ? setLect(u.id) : onTeacher?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                 {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
                 {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
                 {stepBtn(() => onChallenge?.(ch, u), "🧮 応用",
