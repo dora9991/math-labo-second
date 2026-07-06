@@ -12,9 +12,12 @@ import { CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET } from "../engine/scoring.j
 
 // 講義（確認問題）をクリアしたか：その単元に対応する葉一レッスンの key を引いて
 //  haichiPassed（確認問題に合格した動画）に入っているかで判定する。
+//  ※対応する動画が無い単元（例：素因数分解・四則混合の複合・確率）は、講義クリアの
+//   判定しようがないので講義ゲートを自動でスキップする（＝ためす以降にすぐ進める）。
+//   これが無いと、その単元は永久に「講義」から先へ進めなくなる。
 function lectureCleared(unitId, haichiPassed) {
   const found = findHaichiLessonForUnit(unitId);
-  if (!found) return false;
+  if (!found) return true;
   return !!haichiPassed[`g${found.grade}m${found.lesson.n}`];
 }
 
@@ -82,7 +85,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
           // なおす＝「講義・ためすをクリアした上で」直し完了 or 間違いゼロ（先に進む前は未クリア扱い）
           const naosuDone = lectureC && tameC && (relearnN >= CYCLE_RELEARN_TARGET || !hasMistakes);
           const naosuByZero = naosuDone && !hasMistakes && relearnN === 0;             // 間違いゼロで自動クリア（ほめる）
-          const ouyouC = (calcKing[ch.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この章の計算王クリア
+          const ouyouC = (calcKing[u.id]?.bestStreak || 0) >= CALC_KING_CLEAR_STREAK; // 応用＝この小単元の計算王クリア
           const cleared = !!cyc.cleared;                                              // 講義+ためす+なおす＝サイクルクリア
           // 間隔反復：クリア済みで「1日後/1週間後」の復習窓が開いていれば、解き直しで石がもらえる
           const reviewDays = cleared && cyc.clearedAt ? (Date.now() - cyc.clearedAt) / 86400000 : 0;
@@ -165,7 +168,7 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
                 {stepBtn(() => setLect(u.id), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                 {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
                 {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
-                {stepBtn(() => onChallenge?.(), "🧮 応用",
+                {stepBtn(() => onChallenge?.(ch, u), "🧮 応用",
                   tameC && !ouyouC ? "linear-gradient(135deg,#a855f7,#8b5cf6)" : "rgba(139,92,246,.5)",
                   ouyouC, tameC && !ouyouC ? "ためすクリア！挑戦しよう" : null)}
               </div>

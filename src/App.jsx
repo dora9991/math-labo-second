@@ -134,6 +134,7 @@ export default function App() {
   const [weakKey, setWeakKey] = useState(0); // 苦手タイムアタックの再挑戦（もう一回）でリセットする用
   const [practiceUnit, setPracticeUnit] = useState(null); // 間違いノートの単元別じっくり練習で選んだ単元
   const [calcChapter, setCalcChapter] = useState(null); // 計算王への道で選んだ単元（章）
+  const challengeBackRef = useRef("calcKingPick"); // 応用(challenge)の「戻る」先。小単元から直接来た時は"home"
   const pendingMonsterRef = useRef(null); // レベルアップ演出の後に出すための保留枠
   // #4 サイクル初クリア直後（有能感のピーク）に「応用の扉」を出すための保留枠。
   //  レベルアップ演出のonDoneで消費する（levelUpTo/newMonsterと同じ「演出の順番待ち」流儀）。
@@ -1654,13 +1655,14 @@ export default function App() {
         chapterMode
         title="🧮 計算王への道"
         subtitle="単元（章）を選んで、その全範囲のハイレベル問題に連続で挑戦しよう（自己ベストに挑戦）"
-        onPick={(c) => { setCalcChapter(c); setScreen("challenge"); }}
+        onPick={(c) => { setCalcChapter(c); challengeBackRef.current = "calcKingPick"; setScreen("challenge"); }}
         onBack={() => setScreen("home")}
       />
     );
   }
 
-  // チャレンジ「計算王への道」：選んだ単元（章）全体から、式を書く問題を連続正解＋タイムで自己ベストに挑戦
+  // チャレンジ「計算王への道」：選んだ単元（章、または小単元1つだけの疑似章）から、
+  //  式を書く問題を連続正解＋タイムで自己ベストに挑戦。
   if (screen === "challenge" && calcChapter) {
     return (
       <Challenge
@@ -1668,8 +1670,9 @@ export default function App() {
         chapter={calcChapter}
         onResult={recordCalcKing}
         onMistake={(m) => recordWrongAnswer({ ...m, chapterId: calcChapter?.id || null })}
-        onBack={() => setScreen("calcKingPick")}
+        onBack={() => setScreen(challengeBackRef.current)}
         onHome={() => setScreen("home")}
+        backLabel={challengeBackRef.current === "home" ? "ホーム" : "単元をえらぶ"}
       />
     );
   }
@@ -1859,7 +1862,17 @@ export default function App() {
       onSetGrade={setWorld}
       onAnshin={() => goChapter("anshin")}
       onTimeAttack={() => goChapter("timeAttack")}
-      onChallenge={() => setScreen("calcKingPick")}
+      onChallenge={(ch, u) => {
+        // 小単元ごとの「🧮 応用」＝その小単元だけの疑似章を作って直接チャレンジへ（単元をまたがない）。
+        //  引数なし（章えらび画面などの一般入口）は従来どおり一覧(calcKingPick)へ。
+        if (u) {
+          setCalcChapter({ id: u.id, name: u.name, color: ch?.color, units: [u] });
+          challengeBackRef.current = "home";
+          setScreen("challenge");
+        } else {
+          setScreen("calcKingPick");
+        }
+      }}
       onBattle={() => setScreen("battle")}
       onRelearn={(unit) => { setRelearnFocus(unit?.id || null); setScreen("relearn"); }}
       onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}

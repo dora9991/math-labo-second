@@ -18,7 +18,7 @@ import { nextChapterCalcProblem, formatTime } from "../engine/calcKing.js";
 const GOAL = 5; // この問数を解き終わるとタイムが記録される
 // 答え合わせは engine/scoring.js の answerMatches に一元化（サーバ採点 grade.js と同じ判定）。
 
-export default function Challenge({ player, chapter, onResult, onMistake, onBack, onHome }) {
+export default function Challenge({ player, chapter, onResult, onMistake, onBack, onHome, backLabel = "単元をえらぶ" }) {
   // 自己ベスト（その単元の開始時点の値を保持。結果画面で「新記録」判定に使う）
   const [best] = useState(() => {
     const ck = (player.calcKing && chapter && player.calcKing[chapter.id]) || {};
@@ -241,7 +241,7 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
   // ============ イントロ（スタート前） ============
   return (
     <div className="app">
-      <Header player={player} back="単元をえらぶ" onBack={onBack || onHome} />
+      <Header player={player} back={backLabel} onBack={onBack || onHome} />
       <div className="content">
         <div className="pg-ttl">🧮 計算王への道</div>
         <div className="pg-sub">
