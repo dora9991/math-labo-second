@@ -8,6 +8,7 @@
 // ============================================================
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
+import { submitAttempt, serverActive } from "./sync/serverSync.js"; // サーバー権威(Lv2)への影運用。AUTH無効時はno-op
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, makeChoices } from "./engine/generator.js";
@@ -620,8 +621,14 @@ export default function App() {
   //  - 間違いは全件ノートへ（#2：苦手分析の入力を増やすため2連続ミスのゲートを廃止。
   //    表示は Relearn.jsx 側で単元ごとに束ねるので溢れない）
   //  - XPはささやか＆ペナルティなし（自己肯定を下げない）
-  function recordStepAttempt({ skill, unitId, level, templateId, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
+  function recordStepAttempt({ skill, unitId, level, templateId, seed, userAnswer, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
     const sid = data.player.studentId;
+    // ── サーバー権威(Lv2)の影運用：解答をEdge Functionへ裏送信（AUTH無効/seed無しなら何もしない）。
+    //  サーバーがseedから問題を作り直して採点し、保護状態(level/クリスタル等)をサーバー側で更新する。
+    //  ローカルは今まで通り正のまま＝壊れない。一致確認できたらStep5でサーバーを正に切替。
+    if (serverActive() && seed != null && templateId && unitId) {
+      submitAttempt({ unitId, level, templateId, seed, userAnswer, mode: relearn ? "relearn" : cycleSkip ? "confirm" : "practice" });
+    }
     // スキルタグがある中1のみ習熟度(Elo)を更新（中2・中3の固定問題は skill=null）
     // mNew は画面側Elo算出（StepUp/StepUpSimple）。バトル等で未指定なら、ここでElo更新する。
     const mFinal = skill == null ? null

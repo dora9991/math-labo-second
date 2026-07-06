@@ -12,7 +12,7 @@ import DrawPad from "../components/DrawPad.jsx";
 import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
 import * as sfx from "../audio/sfx.js";
-import { genProblem, makeChoices } from "../engine/generator.js";
+import { genProblem, genProblemSeeded, makeChoices } from "../engine/generator.js";
 import { genSeisuToketa, hasToketaSeisu } from "../data/toketa/seisu.js";
 import ToketaHint from "../components/ToketaHint.jsx";
 import { isCorrect } from "../engine/scoring.js";
@@ -58,8 +58,8 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
     for (let i = 0; i < 14; i++) {
       const unit = units[Math.floor(Math.random() * units.length)];
       const level = LEVELS[Math.floor(Math.random() * LEVELS.length)];
-      // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ従来生成。
-      const problem = (hasToketaSeisu(unit.id) && genSeisuToketa(unit.id)) || genProblem(unit, level, recentRef.current);
+      // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ seed 付き生成（サーバー採点の下地）。
+      const problem = (hasToketaSeisu(unit.id) && genSeisuToketa(unit.id)) || genProblemSeeded(unit, level, recentRef.current);
       if (problem) {
         recentRef.current = [...recentRef.current, problem.id].slice(-6);
         setCur({ unit, level, problem });
@@ -92,7 +92,7 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
     setDone(r.n);
     const roundDone = r.n >= ROUND;
 
-    onAttempt?.({ skill: null, unitId: unit.id, level, ok, q: problem.q, ans: problem.ans, userAns: String(choice), mNew: null });
+    onAttempt?.({ skill: null, unitId: unit.id, level, templateId: problem.id, seed: problem.seed ?? null, ok, q: problem.q, ans: problem.ans, userAns: String(choice), userAnswer: String(choice), mNew: null });
 
     if (ok) advanceTimer.current = setTimeout(() => (roundDone ? finishRound() : next()), AUTO_NEXT_MS);
   }
