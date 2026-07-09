@@ -44,7 +44,7 @@ export default function Login({ onDone }) {
 
         <div style={{ textAlign: "left", marginBottom: 12 }}>
           <div style={lbl}>クラスコード</div>
-          <input style={inp} value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="れい：1a2025" autoCapitalize="off" autoCorrect="off" />
+          <input style={inp} value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="IDを入れてください。（例：1204）" autoCapitalize="off" autoCorrect="off" />
         </div>
         <div style={{ textAlign: "left", marginBottom: 12 }}>
           <div style={lbl}>なまえ</div>
