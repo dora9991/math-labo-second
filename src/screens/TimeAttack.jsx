@@ -23,7 +23,7 @@ import { monsterImageUrl } from "../data/monsterImages.js";
 import { pickHitCheer, pickMissCheer, pickKillCheer } from "../data/cheers.js";
 import * as bgm from "../audio/bgm.js";
 import * as sfx from "../audio/sfx.js";
-import { genProblem, makeChoices, isHardProblem } from "../engine/generator.js";
+import { genProblemSeeded, makeChoices, isHardProblem } from "../engine/generator.js";
 import { calcStars, timeAttackXp, timeAttackCoins, timeAttackCrystal, timeAttackStreakBonus, isCorrect, parseAnswer, STAR_TARGET, XP_PER_CORRECT, XP_PENALTY_PER_WRONG, xpRepeatMultiplier } from "../engine/scoring.js";
 
 // 選択肢・正誤判定のヘルパー
@@ -71,16 +71,17 @@ const hitsToKill = (k) => Math.min(4, 2 + Math.floor(k / 4));
 
 // 応援メッセージは data/cheers.js に集約（バトルと共通・バリエーション多め）。
 
-export default function TimeAttack({ player, chapter, unit, level, onComplete, onBackToMap, onHome, weak = false, weakUnits = [], onWeakStart, onHaichi, onRelearn, onOpenRelearnList }) {
+export default function TimeAttack({ player, chapter, unit, level, onComplete, onBackToMap, onHome, weak = false, weakUnits = [], onWeakStart, onHaichi, onRelearn, onOpenRelearnList, onAttempt }) {
   const quizTime = taTimeFor(chapter, unit);
   // 通常TAは「暗算が非常に厳しい問題」を除外して出題（計算王の単元別じっくりで扱う）。
+  //  seed付き生成（サーバー採点の下地）。isHardProblemの判定はq/ansだけ見るのでseed有無に影響されない。
   const genGood = (recent) => {
     for (let i = 0; i < 14; i++) {
-      const p = genProblem(unit, level, recent);
+      const p = genProblemSeeded(unit, level, recent);
       if (!p) return null;
       if (weak || !isHardProblem(p)) return p;
     }
-    return genProblem(unit, level, recent); // 易しいのが見つからない時はそのまま
+    return genProblemSeeded(unit, level, recent); // 易しいのが見つからない時はそのまま
   };
   const [phase, setPhase] = useState("intro"); // intro | playing | finish | end
   const [timeLeft, setTimeLeft] = useState(quizTime);
@@ -215,6 +216,8 @@ export default function TimeAttack({ player, chapter, unit, level, onComplete, o
     setStreak(ns);
     setMaxStreak((m) => Math.max(m, ns));
     setResults((p) => [...p, { q: q.q, ans: q.ans, userAns: parseFloat(val), ok }]);
+    // サーバー権威(Lv2)の影運用：seedがある問題だけ裏で送信
+    onAttempt?.({ unitId: q.unitId, level: q.level, templateId: q.id, seed: q.seed ?? null, userAnswer: String(val), ok, skill: q.skill });
     if (ok) {
       setCorrect((c) => c + 1);
       setShowRing(true); setTimeout(() => setShowRing(false), 700); // 光る◯

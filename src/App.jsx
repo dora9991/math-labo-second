@@ -11,7 +11,7 @@ import * as store from "./store/localStore.js"; // ★将来ここを supabase.j
 import { submitAttempt, serverActive } from "./sync/serverSync.js"; // サーバー権威(Lv2)への影運用。AUTH無効時はno-op
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
-import { genProblem, makeChoices } from "./engine/generator.js";
+import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
 import { updateMastery, levelDifficulty, INITIAL_MASTERY } from "./engine/mastery.js";
 import * as bgm from "./audio/bgm.js";
 import * as sfx from "./audio/sfx.js";
@@ -639,14 +639,18 @@ export default function App() {
   //  - 間違いは全件ノートへ（#2：苦手分析の入力を増やすため2連続ミスのゲートを廃止。
   //    表示は Relearn.jsx 側で単元ごとに束ねるので溢れない）
   //  - XPはささやか＆ペナルティなし（自己肯定を下げない）
+  // ── サーバー権威(Lv2)の影運用：解答をEdge Functionへ裏送信（AUTH無効/seed無しなら何もしない）。
+  //  サーバーがseedから問題を作り直して採点し、保護状態(level/クリスタル等)をサーバー側で更新する。
+  //  ローカルは今まで通り正のまま＝壊れない。全モードがこれを呼べば一致確認→Step5切替に進める。
+  function shadowSubmit({ unitId, level, templateId, seed, userAnswer, mode }) {
+    if (serverActive() && seed != null && templateId && unitId) {
+      submitAttempt({ unitId, level, templateId, seed, userAnswer, mode });
+    }
+  }
+
   function recordStepAttempt({ skill, unitId, level, templateId, seed, userAnswer, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
     const sid = data.player.studentId;
-    // ── サーバー権威(Lv2)の影運用：解答をEdge Functionへ裏送信（AUTH無効/seed無しなら何もしない）。
-    //  サーバーがseedから問題を作り直して採点し、保護状態(level/クリスタル等)をサーバー側で更新する。
-    //  ローカルは今まで通り正のまま＝壊れない。一致確認できたらStep5でサーバーを正に切替。
-    if (serverActive() && seed != null && templateId && unitId) {
-      submitAttempt({ unitId, level, templateId, seed, userAnswer, mode: relearn ? "relearn" : cycleSkip ? "confirm" : "practice" });
-    }
+    shadowSubmit({ unitId, level, templateId, seed, userAnswer, mode: relearn ? "relearn" : cycleSkip ? "confirm" : "practice" });
     // スキルタグがある中1のみ習熟度(Elo)を更新（中2・中3の固定問題は skill=null）
     // mNew は画面側Elo算出（StepUp/StepUpSimple）。バトル等で未指定なら、ここでElo更新する。
     const mFinal = skill == null ? null
@@ -1227,7 +1231,7 @@ export default function App() {
       if (unitMistakes.length && Math.random() < 0.2) {
         const pick = unitMistakes[Math.floor(Math.random() * unitMistakes.length)];
         const lvl = pick.level || battleDiffRef.current.level;
-        const p = genProblem(unit, lvl, lastId) || genProblem(unit, battleDiffRef.current.level, lastId);
+        const p = genProblemSeeded(unit, lvl, lastId) || genProblemSeeded(unit, battleDiffRef.current.level, lastId);
         if (p) {
           battleMistakeSourceRef.current = { unitId: unit.id, q: p.q };
           return { ...p, choices: makeChoices(p.ans) };
@@ -1236,7 +1240,7 @@ export default function App() {
       battleMistakeSourceRef.current = null;
       // ④ 難易度ナビ：ふつう開始→2ミスで↓／5連正解で↑（battleDiffRef を1問ごとに更新）
       const lvl = battleDiffRef.current.level;
-      const p = genProblem(unit, lvl, lastId) || genProblem(unit, "standard", lastId) || genProblem(unit, "easy", lastId);
+      const p = genProblemSeeded(unit, lvl, lastId) || genProblemSeeded(unit, "standard", lastId) || genProblemSeeded(unit, "easy", lastId);
       return p ? { ...p, choices: makeChoices(p.ans) } : null; // choices→4択(数値) / 記述は自由入力
     };
   }
@@ -1267,7 +1271,7 @@ export default function App() {
         const pick = withUnit[Math.floor(Math.random() * withUnit.length)];
         const unit = findUnitById(pick.unitId);
         const lvl = pick.level || battleGeneralDiffRef.current.level;
-        const p = unit && (genProblem(unit, lvl, lastId) || genProblem(unit, battleGeneralDiffRef.current.level, lastId));
+        const p = unit && (genProblemSeeded(unit, lvl, lastId) || genProblemSeeded(unit, battleGeneralDiffRef.current.level, lastId));
         if (p) {
           battleMistakeSourceRef.current = { unitId: pick.unitId, q: p.q };
           return { ...p, unitName: unit.name, level: lvl };
@@ -1281,6 +1285,7 @@ export default function App() {
   // 通常バトルの解答1問ごと：難易度ナビを更新し、出題が誤答束由来なら学び直しの段階も進める。
   function recordBattleGeneralAttempt(a) {
     battleGeneralDiffRef.current = nextDifficulty(battleGeneralDiffRef.current, !!a.ok);
+    shadowSubmit({ unitId: a.unitId, level: a.level, templateId: a.templateId, seed: a.seed, userAnswer: a.userAnswer, mode: "battle" });
     const src = battleMistakeSourceRef.current;
     if (src && src.q === a.q) {
       advanceRelearnPhase(src.unitId, a.ok);
@@ -1552,6 +1557,7 @@ export default function App() {
         unit={sel.unit}
         level={sel.level}
         onComplete={saveTimeAttackResult}
+        onAttempt={(a) => shadowSubmit({ ...a, mode: "practice" })}
         onBackToMap={() => setScreen("chapter")}
         onHome={() => setScreen("home")}
         onHaichi={() => openHaichiStudio(sel.unit, "timeAttack")}
@@ -1603,6 +1609,7 @@ export default function App() {
         unit={sel.unit}
         level={sel.level}
         onComplete={saveSlowResult}
+        onAttempt={(a) => shadowSubmit({ ...a, mode: "practice" })}
         onBackToMap={() => setScreen("chapter")}
         onHome={() => setScreen("home")}
         onRelearn={() => setScreen("relearn")}
@@ -1626,6 +1633,7 @@ export default function App() {
         onNavLevelChange={(lv) => updatePlayer((p) => ({ ...p, navLevel: { ...(p.navLevel || {}), [sel.unit.id]: lv } }))}
         cyclePracticeN={(data.player.cycle && data.player.cycle[sel.unit.id]?.practiceN) || 0}
         onComplete={saveSlowResult}
+        onAttempt={(a) => shadowSubmit({ ...a, mode: "practice" })}
         onBackToMap={() => setScreen("chapter")}
         onHome={() => setScreen("home")}
         onRelearn={() => setScreen("relearn")}
@@ -1715,6 +1723,7 @@ export default function App() {
         player={data.player}
         chapter={calcChapter}
         onResult={recordCalcKing}
+        onAttempt={(a) => shadowSubmit({ ...a, mode: "applied" })}
         onMistake={(m) => recordWrongAnswer({ ...m, chapterId: calcChapter?.id || null })}
         onBack={() => setScreen(challengeBackRef.current)}
         onHome={() => setScreen("home")}

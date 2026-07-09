@@ -5,7 +5,7 @@
 //  ハイレベル＝暗算が厳しい問題(isHardProblem)を優先。無ければ発展。
 //  間違えたら終了。連続正解数と、5問を解き終わるタイムを競う。
 // ============================================================
-import { genProblem, isHardProblem } from "./generator.js";
+import { genProblemSeeded, isHardProblem } from "./generator.js";
 import { pick } from "./rng.js";
 import { calcKingPoolFor } from "../data/calcKingProblems.js";
 
@@ -33,15 +33,15 @@ export function nextCalcProblem(unit, recent = []) {
   if (!unit) return null;
   // ④ 応用は「鬼」問題を最優先で出す（各単元10問用意）。無ければ発展→標準にフォールバック。
   for (let i = 0; i < 16; i++) {
-    const p = genProblem(unit, "oni", recent);
+    const p = genProblemSeeded(unit, "oni", recent);
     if (p) return { ...p, unitName: unit.name };
   }
   // 鬼が無い単元：暗算が厳しい発展を優先
   for (let i = 0; i < 16; i++) {
-    const p = genProblem(unit, "advanced", recent);
+    const p = genProblemSeeded(unit, "advanced", recent);
     if (p && isHardProblem(p)) return { ...p, unitName: unit.name };
   }
-  const p = genProblem(unit, "advanced", recent) || genProblem(unit, "standard", recent);
+  const p = genProblemSeeded(unit, "advanced", recent) || genProblemSeeded(unit, "standard", recent);
   return p ? { ...p, unitName: unit.name } : null;
 }
 
@@ -67,19 +67,19 @@ export function nextChapterCalcProblem(chapter, recent = []) {
   // ④ 応用は「鬼」問題を最優先（各単元10問）。小単元をまたいでランダムに出す。
   for (let i = 0; i < 28; i++) {
     const u = pick(units);
-    const p = genProblem(u, "oni", recent);
+    const p = genProblemSeeded(u, "oni", recent);
     if (p) return { ...p, unitName: chapter.name, subName: u.name };
   }
   // ① 鬼が尽きたら「作業の要る発展問題」を探す
   for (let i = 0; i < 28; i++) {
     const u = pick(units);
-    const p = genProblem(u, "advanced", recent);
+    const p = genProblemSeeded(u, "advanced", recent);
     if (p && needsWork(p)) return { ...p, unitName: chapter.name, subName: u.name };
   }
   // ② 見つからなければ、どれかの発展（無ければ標準）をそのまま出す
   for (let i = 0; i < 10; i++) {
     const u = pick(units);
-    const p = genProblem(u, "advanced", recent) || genProblem(u, "standard", recent);
+    const p = genProblemSeeded(u, "advanced", recent) || genProblemSeeded(u, "standard", recent);
     if (p) return { ...p, unitName: chapter.name, subName: u.name };
   }
   return null;

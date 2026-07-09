@@ -18,7 +18,7 @@ import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
 import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
-import { genProblem, makeChoices } from "../engine/generator.js";
+import { genProblem, genProblemSeeded, makeChoices } from "../engine/generator.js";
 import { genToketa, hasToketa } from "../data/toketa/index.js";
 import ToketaHint from "../components/ToketaHint.jsx";
 import { isCorrect, SLOW_TARGET, xpRepeatMultiplier, CYCLE_PRACTICE_TARGET, slowPointsForLevel } from "../engine/scoring.js";
@@ -38,16 +38,16 @@ const choicesFor = (q) => (q?.toketa && Array.isArray(q.distractors) ? shuffle(q
   : hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans));
 const ansEq = (val, q) => (hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans));
 
-// 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ従来の生成。
+// 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ seed 付き生成（サーバー採点の下地）。
 function genPractice(unit, level, lastId) {
   if (unit && hasToketa(unit.id)) {
     const t = genToketa(unit.id);
     if (t) return t;
   }
-  return genProblem(unit, level, lastId);
+  return genProblemSeeded(unit, level, lastId);
 }
 
-export default function SlowMode({ player, chapter, unit, level, anshin = false, navDifficulty = false, initialNavLevel = "standard", onNavLevelChange, cyclePracticeN = 0, onComplete, onBackToMap, onHome, onRelearn, onBattle, onHaichi }) {
+export default function SlowMode({ player, chapter, unit, level, anshin = false, navDifficulty = false, initialNavLevel = "standard", onNavLevelChange, cyclePracticeN = 0, onComplete, onBackToMap, onHome, onRelearn, onBattle, onHaichi, onAttempt }) {
   const target = anshin ? ANSHIN_TARGET : SLOW_TARGET[level];
   // ④ 難易度ナビ：navDifficulty のときは前回の到達レベル(initialNavLevel)から始め、2ミスで↓／5連正解で↑。
   //  ＝5問ずつに区切っても「発展まで上がった」のが次の区切りへ引き継がれる。
@@ -127,6 +127,8 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
     const ok = ansEq(val, q);
     setTotal((t) => t + 1);
     updateNavDifficulty(ok); // ④ 次の問題の難易度を調整（nav時のみ）
+    // サーバー権威(Lv2)の影運用：seedがある問題（toketa/DB以外）だけ裏で送信
+    onAttempt?.({ unitId: q.unitId, level: q.level, templateId: q.id, seed: q.seed ?? null, userAnswer: String(val), ok, skill: q.skill });
 
     if (ok) {
       const ns = streak + 1;

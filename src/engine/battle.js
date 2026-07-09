@@ -5,7 +5,7 @@
 //  - 出題：モンスターの担当単元から「標準・発展」を出す
 //    ラスボスは全単元の発展のみ
 // ============================================================
-import { genProblem } from "./generator.js";
+import { genProblemSeeded } from "./generator.js";
 import { findUnit, findChapterById } from "../data/index.js";
 import { gearBonuses } from "./gear.js";
 import { pick } from "./rng.js";
@@ -392,7 +392,7 @@ export function genBattleProblem(monster, lastId = null, forceLevel = null) {
     const unit = pool && findUnit(pool.c, pool.u);
     if (!unit) continue;
     const level = pick(levels);
-    const q = genProblem(unit, level, lastId);
+    const q = genProblemSeeded(unit, level, lastId); // seed付き（サーバー採点の下地。DB問題はseed:null）
     if (q) {
       // 中2・中3は問題データが持つ式の4択(q.choices)をそのまま使う。
       //  中1（数値）は choices を持たないので、Battle側は文字入力で受け付ける。

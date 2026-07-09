@@ -748,7 +748,7 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
     setLocked(true); lockedRef.current = true;
     const ok = ansEq(val, q);
     // 演習バトル：1問ごとに習熟(Elo)＋サイクル進捗を更新（仕様はStepUpと同一・表現がバトル）
-    if (onAttempt) onAttempt({ skill: q.skill, unitId: q.unitId, level: q.level, ok, q: q.q, ans: q.ans });
+    if (onAttempt) onAttempt({ skill: q.skill, unitId: q.unitId, level: q.level, ok, q: q.q, ans: q.ans, templateId: q.id, seed: q.seed ?? null, userAnswer: String(val) });
 
     if (ok) {
       sfx.correct();
@@ -840,7 +840,7 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
     sfx.wrong();
     tallyRef.current.wrong++; // 学習記録：時間切れも不正解として数える
     if (q) onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level }); // 時間切れも学び直しへ
-    if (onAttempt && q) onAttempt({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans }); // 演習バトル：時間切れも1試行
+    if (onAttempt && q) onAttempt({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans, templateId: q.id, seed: q.seed ?? null, userAnswer: "" }); // 演習バトル：時間切れも1試行
     enemyTurn("⏰時間切れ！");
     setTimeout(() => { if (phaseRef.current === "fight") { setMonState("idle"); nextQuestion(); } }, 850);
   };

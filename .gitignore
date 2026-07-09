@@ -23,3 +23,6 @@ yarn-error.log*
 # エディタ設定
 .vscode/
 .idea/
+
+# Supabase CLI のローカルキャッシュ（supabase link/functions deploy が作る）
+supabase/.temp/

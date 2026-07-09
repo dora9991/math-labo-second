@@ -203,7 +203,7 @@ export default function TurnBattle({
     lockedRef.current = true;
     sfx.wrong();
     tallyRef.current.wrong++;
-    if (q) { onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level }); onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans }); }
+    if (q) { onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level }); onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans, templateId: q.id, seed: q.seed ?? null, userAnswer: "" }); }
     setShakeAns(true); setTimeout(() => setShakeAns(false), 460);
     setLog(`⏰ 時間切れ！ ${pending?.label || "行動"}は失敗… (正解 ${q?.ans})`);
     setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 850);
@@ -213,7 +213,7 @@ export default function TurnBattle({
     if (lockedRef.current || phaseRef.current !== "question" || !q || val === "" || val == null) return;
     lockedRef.current = true;
     const ok = ansEq(val, q);
-    onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok, q: q.q, ans: q.ans });
+    onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok, q: q.q, ans: q.ans, templateId: q.id, seed: q.seed ?? null, userAnswer: String(val) });
     if (ok) {
       sfx.correct();
       tallyRef.current.correct++;
