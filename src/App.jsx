@@ -8,7 +8,7 @@
 // ============================================================
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
-import { submitAttempt, serverActive } from "./sync/serverSync.js"; // サーバー権威(Lv2)への影運用。AUTH無効時はno-op
+import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
@@ -148,6 +148,29 @@ export default function App() {
       return { ...d, player };
     });
   }
+
+  // ── Step5：サーバー権威への切替（安全な範囲）───────────────────────
+  //  サーバー(applyAttempt)が完全・正しく把握しているのは cycle（進捗）＋haichiPassed（講義合格）だけ。
+  //  表示される「レベル」は playerLevel = 1 + クリア単元数 = cycle 由来なので、ここを渡すだけで
+  //  6/28で報告された「レベル改ざん」を実質的に閉じられる。
+  //  コイン・クリスタル・ガチャ・装備・XP等はサーバーが把握していない（Lv2の対象外）ため、
+  //  絶対に上書きしない＝生徒がためたものは消えない。
+  //  ログインのたびに一度だけ実行。サーバーにまだ記録が無い（cycleが空）ユーザーは何もしない
+  //  （ローカルの初回進捗を消さないため。裏送信が進めば次回ログインから反映される）。
+  useEffect(() => {
+    if (!serverActive()) return;
+    let alive = true;
+    loadServerState().then((s) => {
+      if (!alive || !s || !s.cycle || Object.keys(s.cycle).length === 0) return;
+      updatePlayer((p) => ({
+        ...p,
+        cycle: s.cycle,
+        worldCleared: s.worldCleared || p.worldCleared,
+        haichiPassed: { ...(p.haichiPassed || {}), ...(s.haichiPassed || {}) },
+      }));
+    });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line
 
   // ワールド（学年）を切り替える。レベル/atk/HP はこのワールドのXPで決まるので、
   // 表示用 grade と保存用 player.world を必ず同期させる。
