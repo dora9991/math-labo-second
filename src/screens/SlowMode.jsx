@@ -221,8 +221,7 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
             <div className="res-acts">
               {onRelearn && <button className="rbtn s" onClick={onRelearn}>📖 学び直し</button>}
               {onBattle && <button className="rbtn p" onClick={onBattle}>⚔️ バトルで実践！</button>}
-              <button className="rbtn s" onClick={onBackToMap}>🗺️ 単元へ</button>
-              <button className="rbtn s" onClick={onHome}>🏠 ホーム</button>
+              <button className="rbtn s" onClick={onHome}>🏠 メニューへ</button>
             </div>
           </div>
         </div>

@@ -1642,7 +1642,7 @@ export default function App() {
         level={sel.level}
         onComplete={saveSlowResult}
         onAttempt={(a) => shadowSubmit({ ...a, mode: "practice" })}
-        onBackToMap={() => setScreen("chapter")}
+        onBackToMap={() => setScreen("home")}
         onHome={() => setScreen("home")}
         onRelearn={() => setScreen("relearn")}
         onBattle={() => goBattleForUnit(sel.unit)}
@@ -1666,7 +1666,7 @@ export default function App() {
         cyclePracticeN={(data.player.cycle && data.player.cycle[sel.unit.id]?.practiceN) || 0}
         onComplete={saveSlowResult}
         onAttempt={(a) => shadowSubmit({ ...a, mode: "practice" })}
-        onBackToMap={() => setScreen("chapter")}
+        onBackToMap={() => setScreen("home")}
         onHome={() => setScreen("home")}
         onRelearn={() => setScreen("relearn")}
         onBattle={() => goBattleForUnit(sel.unit)}
