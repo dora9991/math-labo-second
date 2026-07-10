@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
 import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
+import { AUTH_ENABLED } from "./auth/supabase.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
@@ -80,7 +81,10 @@ export default function App() {
   const [data, setData] = useState(() => store.load());
   const [screen, setScreen] = useState("start");
   // 初回起動か？（v4からの引き継ぎ画面を出すか）。既に進捗がある人には出さない。
+  //  ログイン制（Supabase認証）の生徒は「前のアプリ」を触ったことが無く、戦闘システムも
+  //  刷新済みで旧データの引き継ぎに意味が無いため、引き継ぎ画面自体を出さない。
   const [needsOnboard, setNeedsOnboard] = useState(() => {
+    if (AUTH_ENABLED) return false;
     try { if (localStorage.getItem("ml5_2_onboarded")) return false; } catch {}
     const p = store.load().player || {};
     const wx = p.worldXp || {};
