@@ -6,6 +6,7 @@
 import { useState } from "react";
 import Header from "../components/Header.jsx";
 import BackupBox from "../components/BackupBox.jsx";
+import ClassStats from "../components/ClassStats.jsx";
 import { MONSTERS } from "../data/monsters.js";
 import { levelTitle, playerLevel } from "../engine/scoring.js";
 
@@ -41,6 +42,9 @@ export default function Admin({ player, records, admin, onExport, onImport, onBa
       <div className="content">
         <div className="pg-ttl">🛠️ 管理用モード</div>
         <div className="pg-sub">先生用：値を自由に設定できます（生徒には見えない隠しモード）</div>
+
+        {/* クラス全員の成績（サーバー記録・先生の合言葉が必要） */}
+        <ClassStats />
 
         {/* 現状サマリ */}
         <div className="glass" style={{ padding: "12px 14px", display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "rgba(255,255,255,.7)" }}>
