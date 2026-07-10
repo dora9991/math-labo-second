@@ -149,10 +149,10 @@ export default function Character({ player, onSetAvatar, onSetName, onBuyHero, o
         <div className="glass" style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
           <Avatar avatar={player.avatar} size={64} ring="rgba(255,255,255,.3)" />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,.45)", marginBottom: 4 }}>名前</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.45)", marginBottom: 4 }}>ニックネーム</div>
             <div style={{ display: "flex", gap: 8 }}>
               <input
-                value={nameInput} maxLength={10} placeholder="なまえ（10文字まで）"
+                value={nameInput} maxLength={10} placeholder="ニックネーム（10文字まで）"
                 onChange={(e) => setNameInput(e.target.value)}
                 style={{ flex: 1, minWidth: 0, width: 0, fontSize: 14, fontWeight: 800, padding: "8px 10px", borderRadius: 9, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.06)", color: "#fff", fontFamily: "inherit" }}
               />

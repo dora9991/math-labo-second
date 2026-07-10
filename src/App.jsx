@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
 import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
 import { AUTH_ENABLED } from "./auth/supabase.js";
+import { updateNickname } from "./auth/kidAuth.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
@@ -1023,7 +1024,11 @@ export default function App() {
 
   // キャラクター画面：自分のキャラ／名前を設定
   function setAvatar(avatar) { updatePlayer((p) => ({ ...p, avatar })); }
-  function setName(name) { updatePlayer((p) => ({ ...p, name: (name || "").slice(0, 10) })); }
+  function setName(name) {
+    const trimmed = (name || "").slice(0, 10);
+    updatePlayer((p) => ({ ...p, name: trimmed }));
+    if (serverActive()) updateNickname(trimmed); // ニックネームはいつでも変更可（ログインIDとは無関係）
+  }
   // ヒーローを💰HERO_PRICEで購入して解放（そのまま装備する）。成功で true。
   function buyHero(id) {
     let ok = false;

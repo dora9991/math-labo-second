@@ -10,6 +10,7 @@ import App from "../App.jsx";
 import Login from "../screens/Login.jsx";
 import { AUTH_ENABLED, supabase } from "./supabase.js";
 import { setActiveUid, getActiveUid } from "./session.js";
+import { getAutoLogin, setAutoLogin, setRememberedId } from "./loginPrefs.js";
 
 export default function AuthGate() {
   if (!AUTH_ENABLED) return <App />; // 認証OFF＝従来どおり
@@ -18,9 +19,16 @@ export default function AuthGate() {
 
   useEffect(() => {
     let alive = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
-      const u = data?.session?.user || null;
+      let u = data?.session?.user || null;
+      // 「自動ログイン」がOFFなら、次に開いたときは毎回ログインし直させる
+      //  （共有のパソコンで前の生徒のログインが残らないようにするため）。
+      //  ※ ページを開いた直後の一度だけの判定。使用中に勝手にログアウトすることはない。
+      if (u && !getAutoLogin()) {
+        await supabase.auth.signOut();
+        u = null;
+      }
       setActiveUid(u?.id || null);
       setUser(u);
     });
@@ -40,7 +48,11 @@ export default function AuthGate() {
   return (
     <>
       <App key={user.id} />
-      <button data-sfx="none" onClick={() => { setActiveUid(null); supabase.auth.signOut(); }}
+      <button data-sfx="none" onClick={() => {
+        setActiveUid(null);
+        setAutoLogin(false); setRememberedId(""); // 明示的なログアウト＝この端末の記憶も消す（共有端末対策）
+        supabase.auth.signOut();
+      }}
         title="ログアウト"
         style={{ position: "fixed", top: 8, right: 8, zIndex: 300, width: 34, height: 34, borderRadius: 999,
           border: "1px solid rgba(255,255,255,.2)", background: "rgba(0,0,0,.45)", color: "#fff", cursor: "pointer", fontSize: 15 }}>
