@@ -11,6 +11,7 @@ import * as store from "./store/localStore.js"; // ★将来ここを supabase.j
 import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
 import { AUTH_ENABLED } from "./auth/supabase.js";
 import { updateNickname } from "./auth/kidAuth.js";
+import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
@@ -153,6 +154,15 @@ export default function App() {
       return { ...d, player };
     });
   }
+
+  // ログイン制でニックネーム未設定（新規登録直後など）なら、ログインIDを初期値として入れる。
+  //  ＝「最初はIDが名前として認識」。あとは設定（キャラクター画面）でいつでも変更可能。
+  useEffect(() => {
+    if (!AUTH_ENABLED) return;
+    if (data.player.name) return; // 既に名前がある（設定済み or 前のアプリから引き継ぎ済み）なら何もしない
+    const id = getRememberedId();
+    if (id) setName(id);
+  }, []); // eslint-disable-line
 
   // ── Step5：サーバー権威への切替（安全な範囲）───────────────────────
   //  サーバー(applyAttempt)が完全・正しく把握しているのは cycle（進捗）＋haichiPassed（講義合格）だけ。

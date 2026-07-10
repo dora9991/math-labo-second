@@ -1,6 +1,7 @@
 // ============================================================
 // Login.jsx — 子ども向けログイン画面（メール不要）。
-//  ・初めての人：ID・ニックネーム・合言葉（パスワード）を自分で決めて登録。
+//  ・初めての人：ID・合言葉（パスワード）だけを自分で決めて登録。
+//    ニックネームは最初はIDと同じ（あとでキャラクター設定からいつでも変更可）。
 //  ・2回目以降：IDは前回の記憶から自動で入っていて、合言葉を入れるだけ。
 //  ・「自動ログイン」にチェックすると、次回はそれすら省略して直接入れる
 //    （共有の端末では毎回チェックを外すことをすすめる）。
@@ -14,20 +15,19 @@ export default function Login({ onDone }) {
   const remembered = getRememberedId();
   const [isNewMode, setIsNewMode] = useState(!remembered); // 記憶ID無し＝初めての人モード
   const [id, setId] = useState(remembered);
-  const [nickname, setNickname] = useState("");
   const [pin, setPin] = useState("");
   const [autoLogin, setAutoLoginState] = useState(() => getAutoLogin());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const ready = id.trim() && /^\d{4}$/.test(pin) && (!isNewMode || nickname.trim());
+  const ready = id.trim() && /^\d{4}$/.test(pin);
 
   async function submit(e) {
     e?.preventDefault();
     if (!ready || busy) return;
     setBusy(true); setErr("");
     try {
-      const { uid } = await signInKid(id, pin, nickname);
+      const { uid } = await signInKid(id, pin, id); // ニックネームの初期値はID（あとで設定変更可）
       setRememberedId(id);
       setAutoLogin(autoLogin);
       onDone?.(uid);
@@ -40,7 +40,6 @@ export default function Login({ onDone }) {
   function switchToNew() {
     setIsNewMode(true);
     setId("");
-    setNickname("");
     setPin("");
     setErr("");
   }
@@ -65,13 +64,6 @@ export default function Login({ onDone }) {
           <div style={lbl}>ID</div>
           <input style={inp} value={id} onChange={(e) => setId(e.target.value)} placeholder="IDを入れてください。（例：1204）" autoCapitalize="off" autoCorrect="off" />
         </div>
-
-        {isNewMode && (
-          <div style={{ textAlign: "left", marginBottom: 12 }}>
-            <div style={lbl}>ニックネーム</div>
-            <input style={inp} value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="れい：さとうたろう" />
-          </div>
-        )}
 
         <div style={{ textAlign: "left", marginBottom: 10 }}>
           <div style={lbl}>合言葉（パスワード・すうじ4つ）</div>
@@ -106,7 +98,7 @@ export default function Login({ onDone }) {
 
         <div style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", marginTop: 14, lineHeight: 1.6 }}>
           {isNewMode
-            ? <>IDと合言葉は自分で決めよう。わすれないようにメモしておいてね！<br />ニックネームはあとから いつでも変えられるよ。</>
+            ? <>IDと合言葉は自分で決めよう。わすれないようにメモしておいてね！<br />ニックネーム（呼び名）は はじめはIDと同じ。あとから「🎨キャラクター」でいつでも変えられるよ。</>
             : <>ID・合言葉が ちがう人は「ちがうIDを つかう」を押してね。</>}
         </div>
       </form>
