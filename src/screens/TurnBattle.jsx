@@ -23,6 +23,9 @@ import {
   isTwoPhaseBoss, BOSS_PHASE2_PATTERN, JUST_GUARD_COUNTER_MULT,
 } from "../engine/battleTurn.js";
 
+// 敵の通常攻撃・連続攻撃の各発は20%の確率でかわせる（ため攻撃・必殺技は対象外＝必ず当たる）
+const DODGE_CHANCE = 0.2;
+
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
 const hasChoices = (q) => Array.isArray(q?.choices) && q.choices.length > 0;
 const ansEq = (val, q) => (hasChoices(q)
@@ -369,7 +372,7 @@ export default function TurnBattle({
     const justGuard = isBurst && guardActiveRef.current; // ためた一撃を防御で受けた＝ジャスト防御
     const label = isBurst ? `${monster.name} の ためた一撃！` : `${monster.name} のこうげき！`;
     if (isBurst) showEnemyFx({ icon: "💥", label: "ためた一撃！", color: "#f87171" });
-    enemyDamage(dmg, label);
+    enemyDamage(dmg, label, { guaranteed: isBurst }); // ため攻撃は必ず命中
     if (justGuard) justGuardCounter();
     afterEnemy();
   }
@@ -408,8 +411,17 @@ export default function TurnBattle({
   }
 
   // 敵の1撃をプレイヤーへ（バリア→防御半減→軽減の順で処理）
-  function enemyDamage(raw, label) {
+  //  opts.guaranteed=true（ため攻撃/burst）は必ず命中。それ以外（通常こうげき・連続こうげきの各発）は
+  //  DODGE_CHANCEの確率でかわせる＝毎回100%食らうわけではない、という緊張と息抜きを作る。
+  function enemyDamage(raw, label, opts = {}) {
     if (endedRef.current) return;
+    if (!opts.guaranteed && Math.random() < DODGE_CHANCE) {
+      setMonState("attack"); setAnimKey((k) => k + 1);
+      showEnemyFx({ icon: "💨", label: "ひらりとかわした！", color: "#86efac" });
+      setLog(`${label} → 💨 かわした！ ノーダメージ！`);
+      sfx.tap();
+      return;
+    }
     let dmg = raw;
     let note = "";
     if (nullifyRef.current && dmg > 0) {

@@ -22,6 +22,7 @@ import { findItem } from "../engine/items.js";
 import { isCorrect, playerLevel } from "../engine/scoring.js";
 
 const ENEMY_CHARGE_NEED = 2; // super型が超必殺を撃つまでのチャージ回数（engine ENEMY_AI.super と一致）
+const DODGE_CHANCE = 0.2; // 敵の通常こうげきは20%の確率でかわせる（ため攻撃・超必殺技は対象外＝必ず当たる）
 
 // 中2・中3は答えが「式」の4択（文字列一致）、中1は数値（isCorrect）。SlowMode/TimeAttackと同じ判定方式に揃える。
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
@@ -496,7 +497,16 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
 
   // 敵の攻撃を実際に当てる（ガード・画面ゆれ・被ダメ・敗北判定）
   //  opts.pierce=true … ガードを無視（防御貫通）
+  //  opts.guaranteed=true（ため攻撃burst/超必殺技super）は必ず命中。それ以外はDODGE_CHANCEでかわせる。
   function enemyHit(rawDmg, label, fx, opts = {}) {
+    if (!opts.guaranteed && Math.random() < DODGE_CHANCE) {
+      setShakeAns(true); setTimeout(() => setShakeAns(false), 300);
+      setMonState("attack"); setAnimKey((k) => k + 1);
+      showEnemyFx({ icon: "💨", label: "ひらりとかわした！", color: "#86efac" });
+      setLog(`${label} → 💨 かわした！ ノーダメージ！`);
+      sfx.tap();
+      return;
+    }
     // 暴走（enrage）：敵HPが半分以下になると攻撃力アップ
     let scaled = rawDmg;
     if (monster.enrage && monsterHpRef.current <= monster.hp * 0.5) scaled = rawDmg * monster.enrage;
@@ -613,8 +623,9 @@ export default function Battle({ player, monster, ally = null, onResult, onSpCha
       burst: { icon: "💢", label: "ためた一撃！", color: "#f87171" },
       super: { icon: "💥", label: "超必殺技！", color: "#f472b6" },
     };
-    if (act.kind === "super" || act.kind === "burst") setEnemyIntent(null); // 撃ったので予告クリア
-    enemyHit(monster.atk * (act.mult || 1), `${pre}${monster.name} ${act.label}`, FX[act.kind] || null);
+    const isChargedHit = act.kind === "super" || act.kind === "burst";
+    if (isChargedHit) setEnemyIntent(null); // 撃ったので予告クリア
+    enemyHit(monster.atk * (act.mult || 1), `${pre}${monster.name} ${act.label}`, FX[act.kind] || null, { guaranteed: isChargedHit });
   }
 
   // 追加の敵スキルを適用する。処理したら true（＝通常攻撃に進まない）。
