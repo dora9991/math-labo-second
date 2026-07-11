@@ -81,3 +81,18 @@ export async function updateNickname(name) {
     await supabase.from("students").update({ name: String(name || "").trim() }).eq("id", uid);
   } catch { /* noop */ }
 }
+
+/** ご意見箱：生徒の意見をサーバー(feedback)に送る。失敗しても致命的ではない（ローカルには別途保存済み）。 */
+export async function submitFeedback({ message, category = "", name = "", loginId = "" }) {
+  if (!supabase) return { ok: false };
+  try {
+    const { data } = await supabase.auth.getUser();
+    const uid = data?.user?.id;
+    if (!uid) return { ok: false };
+    const { error } = await supabase.from("feedback").insert({
+      student_id: uid, name: String(name || "").trim(), login_id: String(loginId || "").trim(),
+      category, message: String(message || "").trim(),
+    });
+    return { ok: !error };
+  } catch { return { ok: false }; }
+}

@@ -76,3 +76,23 @@ create policy "attempts self select" on public.attempts
 
 -- 教師閲覧（任意・後で）：別途 role 列や teachers テーブルを足し、service_role の
 --  Edge Function 経由で集計を返す。生徒の RLS はあくまで「自分の行だけ」を維持する。
+
+-- ============================================================
+-- Step4：ご意見箱（生徒からのフリーテキスト意見・要望・バグ報告）
+--  生徒は「自分の意見を送る（insert）」だけできる。他人の意見は読めない・書き換えられない・削除できない。
+--  先生は Edge Function `feedback-list`（service_role・TEACHER_PASSゲート）経由でだけ全件を読む。
+-- ============================================================
+create table if not exists public.feedback (
+  id          bigint generated always as identity primary key,
+  student_id  uuid references public.students(id) on delete set null,
+  name        text,        -- 送信時点のニックネームのスナップショット（後で名前を変えても残る）
+  login_id    text,        -- 送信時点のログインID
+  category    text,        -- たのしい/こまった/バグ/こうしてほしい/その他
+  message     text not null,
+  created_at  timestamptz not null default now()
+);
+alter table public.feedback enable row level security;
+
+drop policy if exists "feedback self insert" on public.feedback;
+create policy "feedback self insert" on public.feedback
+  for insert with check (auth.uid() = student_id);

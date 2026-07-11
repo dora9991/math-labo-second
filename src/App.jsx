@@ -10,7 +10,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
 import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
 import { AUTH_ENABLED } from "./auth/supabase.js";
-import { updateNickname } from "./auth/kidAuth.js";
+import { updateNickname, submitFeedback } from "./auth/kidAuth.js";
 import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
@@ -52,6 +52,7 @@ import Skill from "./screens/Skill.jsx";
 import StatusDetail from "./screens/StatusDetail.jsx";
 import Admin from "./screens/Admin.jsx";
 import Character from "./screens/Character.jsx";
+import Feedback from "./screens/Feedback.jsx";
 import { HERO_PRICE } from "./data/heroes.js";
 import HowTo from "./screens/HowTo.jsx";
 import Clinic from "./screens/Clinic.jsx";
@@ -1039,6 +1040,15 @@ export default function App() {
     updatePlayer((p) => ({ ...p, name: trimmed }));
     if (serverActive()) updateNickname(trimmed); // ニックネームはいつでも変更可（ログインIDとは無関係）
   }
+
+  // ご意見箱：ローカルには必ず残す（サーバー未設定/通信失敗でも消えない）＋サーバーにも送る（先生が閲覧）
+  async function sendFeedback({ message, category }) {
+    const entry = { message, category, at: Date.now() };
+    updatePlayer((p) => ({ ...p, feedbackLog: [...(p.feedbackLog || []), entry].slice(-20) }));
+    if (serverActive()) {
+      await submitFeedback({ message, category, name: data.player.name, loginId: getRememberedId() });
+    }
+  }
   // ヒーローを💰HERO_PRICEで購入して解放（そのまま装備する）。成功で true。
   function buyHero(id) {
     let ok = false;
@@ -1424,6 +1434,11 @@ export default function App() {
         />
       </Suspense>
     );
+  }
+
+  // ご意見箱：アプリへの感想・要望・バグ報告を先生に届ける
+  if (screen === "feedback") {
+    return <Feedback player={data.player} onBack={() => setScreen("home")} onSubmit={sendFeedback} />;
   }
 
   if (screen === "chapter") {
@@ -1975,6 +1990,7 @@ export default function App() {
       onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}
       onDialogue={() => setScreen("dialogue")}
       onTeacherMode={() => { setTeacherFocus(null); setScreen("teacherMode"); }}
+      onFeedback={() => setScreen("feedback")}
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}
       onUnitTeacher={(unit) => { const ch = findChapterByUnitId(unit.id); setTeacherFocus({ chapterId: ch?.id || null, unit }); setScreen("teacherMode"); }}

@@ -16,7 +16,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
   onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitTeacher, onUnitPractice, onUnitBattle, onDiagnose,
-  onDetail, onCharacter, onTeacherMode,
+  onDetail, onCharacter, onTeacherMode, onFeedback,
 }) {
   const availGrades = gradesWithChapters();
   const [msg] = useState(() => voice("open"));
@@ -125,6 +125,21 @@ export default function Home({
             <span style={{ flex: 1, textAlign: "left" }}>
               <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>弱点克服モード</span>
               <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .65 }}>自分がまちがえた問題をまとめて学び直そう</span>
+            </span>
+          </button>
+        )}
+
+        {/* ご意見箱（アプリへの感想・要望・バグ報告を先生に届ける） */}
+        {onFeedback && (
+          <button data-sfx="none" onClick={onFeedback} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            margin: "0 0 8px", padding: "12px 14px", borderRadius: 13, cursor: "pointer", fontFamily: "inherit",
+            border: "1.5px solid rgba(251,191,36,.4)", background: "rgba(251,191,36,.10)", color: "#fff",
+          }}>
+            <span style={{ fontSize: 22 }}>📮</span>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>ご意見箱</span>
+              <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .65 }}>たのしかったこと・こまったこと・こうしてほしいことを先生に届けよう</span>
             </span>
           </button>
         )}
