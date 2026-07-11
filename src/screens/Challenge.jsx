@@ -37,6 +37,7 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
   const [showStart, setShowStart] = useState(false); // スタート時の START! 演出
   const [practice, setPractice] = useState(false);   // ★3 練習王：まちがえても終わらない
   const [wrongFb, setWrongFb] = useState(null);       // 練習モードで誤答時に正解を見せる { ans }
+  const [altShown, setAltShown] = useState(null);     // 正解後の「別解」表示中 { alt }（cur.altがある問題のみ・任意）
 
   const recentRef = useRef([]);
   const startRef = useRef(0);
@@ -51,7 +52,7 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
     bgm.play("calcplay");   // スタートでメニュー選択画面BGMに切替
     setShowStart(true);     // 同じタイミングで START! を出す
     recentRef.current = [];
-    setStreak(0); setTime5(null); setInput(""); setElapsed(0);
+    setStreak(0); setTime5(null); setInput(""); setElapsed(0); setAltShown(null);
     const q = nextChapterCalcProblem(chapter, recentRef.current);
     recentRef.current = q ? [q.id] : [];
     setCur(q);
@@ -70,6 +71,13 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
     setTimeout(() => inputRef.current?.focus(), 30);
   }
 
+  // 別解パネルを閉じて次の問題へ（タイマーも再開）
+  function continueFromAlt() {
+    setAltShown(null);
+    intervalRef.current = setInterval(() => setElapsed(performance.now() - startRef.current), 100);
+    nextProblem();
+  }
+
   function end(finalStreak, finalTime5) {
     clearInterval(intervalRef.current);
     setView("result");
@@ -86,8 +94,9 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
       const ns = streak + 1;
       setStreak(ns);
       setFlash(true); setTimeout(() => setFlash(false), 260);
-      let t5 = time5;
-      if (ns === GOAL) { t5 = performance.now() - startRef.current; setTime5(t5); }
+      if (ns === GOAL) setTime5(performance.now() - startRef.current); // タイムは別解を見る前に確定させる
+      // 別解がある問題（今は正の数・負の数のパイロット）は、次に進む前に一呼吸おいて見せる。
+      if (cur.alt) { clearInterval(intervalRef.current); setAltShown({ alt: cur.alt }); return; }
       nextProblem();
     } else if (practice) {
       // ★3 練習王：終わらない。正解を見せて、連続をリセットして次へ。
@@ -184,37 +193,56 @@ export default function Challenge({ player, chapter, onResult, onMistake, onBack
             </div>
           </div>
 
-          {/* 問題＋入力 */}
+          {/* 問題＋入力（正解後、別解がある問題は入力の代わりに別解パネルを見せる） */}
           <div className="glass" style={{ padding: 18 }}>
             <span className="ch-tier-pill" style={{ background: "rgba(168,85,247,.18)", color: "#d8b4fe" }}>🔥 {cur.unitName}{cur.subName ? ` ・ ${cur.subName}` : ""}</span>
             <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.6, color: "#fff", marginTop: 10 }}><MathText>{cur.q}</MathText></div>
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-              inputMode="text"
-              placeholder="答えを入力（例：25 / -3 / 1/2 / x=2, y=-1）"
-              data-sfx="none"
-              style={{
-                width: "100%", boxSizing: "border-box", textAlign: "center",
-                fontSize: 22, fontWeight: 800, padding: "12px 10px", marginTop: 14,
-                borderRadius: 12, border: "2px solid rgba(168,85,247,.4)",
-                background: "rgba(255,255,255,.06)", color: "#fff", outline: "none",
-              }}
-            />
-            <button
-              onClick={submit}
-              disabled={input.trim() === ""}
-              data-sfx="none"
-              style={{
-                width: "100%", marginTop: 12, padding: "13px", borderRadius: 12, border: "none",
-                cursor: input.trim() === "" ? "not-allowed" : "pointer", fontSize: 16, fontWeight: 900,
-                color: "#fff", background: input.trim() === "" ? "rgba(168,85,247,.4)" : "linear-gradient(135deg,#a855f7,#7c3aed)",
-              }}
-            >
-              答える →
-            </button>
+
+            {altShown ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(56,189,248,.12)", border: "1px solid rgba(56,189,248,.4)" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 900, color: "#7dd3fc", marginBottom: 6 }}>🔀 別の解き方もあるよ</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "#fff", lineHeight: 1.7 }}><MathText>{altShown.alt}</MathText></div>
+                </div>
+                <button onClick={continueFromAlt} data-sfx="none" style={{
+                  width: "100%", marginTop: 12, padding: "13px", borderRadius: 12, border: "none",
+                  cursor: "pointer", fontSize: 16, fontWeight: 900, color: "#fff",
+                  background: "linear-gradient(135deg,#a855f7,#7c3aed)",
+                }}>
+                  つぎへ →
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+                  inputMode="text"
+                  placeholder="答えを入力（例：25 / -3 / 1/2 / x=2, y=-1）"
+                  data-sfx="none"
+                  style={{
+                    width: "100%", boxSizing: "border-box", textAlign: "center",
+                    fontSize: 22, fontWeight: 800, padding: "12px 10px", marginTop: 14,
+                    borderRadius: 12, border: "2px solid rgba(168,85,247,.4)",
+                    background: "rgba(255,255,255,.06)", color: "#fff", outline: "none",
+                  }}
+                />
+                <button
+                  onClick={submit}
+                  disabled={input.trim() === ""}
+                  data-sfx="none"
+                  style={{
+                    width: "100%", marginTop: 12, padding: "13px", borderRadius: 12, border: "none",
+                    cursor: input.trim() === "" ? "not-allowed" : "pointer", fontSize: 16, fontWeight: 900,
+                    color: "#fff", background: input.trim() === "" ? "rgba(168,85,247,.4)" : "linear-gradient(135deg,#a855f7,#7c3aed)",
+                  }}
+                >
+                  答える →
+                </button>
+              </>
+            )}
             {wrongFb && (
               <div style={{ marginTop: 12, textAlign: "center", fontSize: 14, fontWeight: 800, color: "#fb923c" }}>
                 おしい！ 正解は <strong style={{ color: "#4ade80" }}><MathText>{wrongFb.ans}</MathText></strong>。次もいこう✨

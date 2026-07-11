@@ -99,6 +99,21 @@ export default function Home({
           <UnitCycle grade={grade} cycleMap={player.cycle || {}} haichiPassed={player.haichiPassed || {}} noVideoLecturePassed={player.noVideoLecturePassed || {}} calcKing={player.calcKing || {}} mistakeUnitIds={mistakeUnitIds} onHaichi={onUnitHaichi} onTeacher={onUnitTeacher} onPractice={onUnitPractice} onBattle={onUnitBattle} onRelearn={onRelearn} onChallenge={onChallenge} onDiagnose={onDiagnose} />
         )}
 
+        {/* 計算王への道（学習サイクルの外・章まるごとの応用問題に挑戦。得意な子の「もっと」向け） */}
+        {onChallenge && (
+          <button data-sfx="none" onClick={() => onChallenge()} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            margin: "0 0 8px", padding: "12px 14px", borderRadius: 13, cursor: "pointer", fontFamily: "inherit",
+            border: "1.5px solid rgba(168,85,247,.4)", background: "rgba(168,85,247,.10)", color: "#fff",
+          }}>
+            <span style={{ fontSize: 22 }}>🧮</span>
+            <span style={{ flex: 1, textAlign: "left" }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>計算王への道</span>
+              <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .65 }}>章まるごとの応用問題に挑戦。連続正解とタイムで自己ベストへ</span>
+            </span>
+          </button>
+        )}
+
         {/* 弱点克服モード（学習サイクルの外・自分の学び直し一覧をまとめて見る） */}
         {onWeakness && (
           <button data-sfx="none" onClick={onWeakness} style={{
