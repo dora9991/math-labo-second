@@ -9,6 +9,7 @@ import Header from "../components/Header.jsx";
 import CharBubble, { voice } from "../components/CharBubble.jsx";
 import { MathBackdrop } from "../components/Decorations.jsx";
 import UnitCycle from "../components/UnitCycle.jsx";
+import UpdateNews from "../components/UpdateNews.jsx";
 import { gradesWithChapters } from "../data/index.js";
 
 const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 中2=赤 中3=黄
@@ -28,6 +29,9 @@ export default function Home({
       <MathBackdrop />
       <Header player={player} />
       <div className="content" style={{ position: "relative", zIndex: 1 }}>
+        {/* アップデート情報（最上部・折りたたみ。最新のタイトルだけ見えて、タップで全履歴） */}
+        <UpdateNews />
+
         {/* 学年えらび（中1・中2・中3を3列・大きく・携帯でも押しやすく） */}
         <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
           {[1, 2, 3].map((g) => {
