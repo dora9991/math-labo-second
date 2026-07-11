@@ -113,9 +113,24 @@ function UnitPicker({ player, onPick, onBack }) {
   );
 }
 
+// 小単元の問題一覧から「主要な問題（教科書の例題ぶん）」だけを既定表示にする。
+//  ★3応用は種類があっていいのでそのまま全部main行き、★1基礎/★2標準は各2問までmain、残りはrest（ほかの問題も見る）へ。
+function pickMainProblems(items) {
+  const seenCount = {};
+  const main = [];
+  const rest = [];
+  for (const p of items) {
+    if ((p.difficulty || "").includes("応用")) { main.push(p); continue; }
+    const n = (seenCount[p.difficulty] = (seenCount[p.difficulty] || 0) + 1);
+    if (n <= 2) main.push(p); else rest.push(p);
+  }
+  return { main, rest };
+}
+
 // ── ② 問題えらび（小単元でグループ化した一覧） ─────────────
 function ProblemPicker({ player, unitKey, onPick, onBack, confirmBtn = null }) {
   const [data, setData] = useState(null);
+  const [expanded, setExpanded] = useState({});
   useEffect(() => {
     let alive = true;
     UNIT_LOADERS[unitKey]().then((m) => { if (alive) setData(m.default || m); });
@@ -151,23 +166,35 @@ function ProblemPicker({ player, unitKey, onPick, onBack, confirmBtn = null }) {
             ✅ 確認問題にすすむ（講義クリア）
           </button>
         )}
-        {Object.entries(groups).map(([subunit, items]) => (
-          <details key={subunit} style={{ marginBottom: 8 }}>
-            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 800, padding: "8px 4px", color: "#c7d2fe" }}>
-              {subunit}（{items.length}問）
-            </summary>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-              {items.map((p) => (
-                <button key={p.id} onClick={() => onPick(p)} className="nb-btn"
-                  style={{ textAlign: "left", display: "flex", gap: 10, alignItems: "center" }}>
-                  <span style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.45)", whiteSpace: "nowrap" }}>{p.difficulty}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, display: "-webkit-box",
-                    WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.problem_text}</span>
-                </button>
-              ))}
-            </div>
-          </details>
-        ))}
+        {Object.entries(groups).map(([subunit, items]) => {
+          const { main, rest } = pickMainProblems(items);
+          const isExpanded = !!expanded[subunit];
+          const visible = isExpanded ? [...main, ...rest] : main;
+          return (
+            <details key={subunit} style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 800, padding: "8px 4px", color: "#c7d2fe" }}>
+                {subunit}（{items.length}問）
+              </summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                {visible.map((p) => (
+                  <button key={p.id} onClick={() => onPick(p)} className="nb-btn"
+                    style={{ textAlign: "left", display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.45)", whiteSpace: "nowrap" }}>{p.difficulty}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, display: "-webkit-box",
+                      WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.problem_text}</span>
+                  </button>
+                ))}
+                {!isExpanded && rest.length > 0 && (
+                  <button onClick={(e) => { e.preventDefault(); setExpanded((s) => ({ ...s, [subunit]: true })); }}
+                    style={{ textAlign: "center", padding: "8px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+                      border: "1.5px dashed rgba(255,255,255,.25)", background: "transparent", color: "rgba(255,255,255,.55)", fontSize: 11.5, fontWeight: 800 }}>
+                    ＋ ほかの問題も見る（あと{rest.length}問）
+                  </button>
+                )}
+              </div>
+            </details>
+          );
+        })}
       </div>
     </div>
   );
@@ -190,6 +217,13 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
   const [picked, setPicked] = useState(null); // check中に選んだ選択肢のindex（結果表示用）
   const boardRef = useRef(null);
   const canSpeak = speechAvailable();
+  // スマホ幅では黒板(上)＋チャット(下)の縦積みにする（横並びだと黒板がつぶれて読めなくなるため）。
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 700);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 700);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const node = currentNode(tm, state);
   // explainノードは短い一言に分割。checkは問い1つ。
@@ -267,13 +301,9 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
   return (
     <div className="app">
       <Header player={player} />
-      <div className="content" style={{ maxWidth: 880, display: "flex", flexDirection: "column", height: "calc(100dvh - 64px)" }}>
-        {/* 上段：問題文（左）＋声＋「戻る」を右上に置く */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 900, color: "#fef9c3",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            📌 {problem.problem_text}
-          </div>
+      <div className="content" style={{ maxWidth: isMobile ? 640 : 880, display: "flex", flexDirection: "column", height: "calc(100dvh - 64px)" }}>
+        {/* 上段：声＋「戻る」を右上に置く（問題文は下の黒板に固定表示するのでここには置かない） */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginBottom: 8 }}>
           {canSpeak && (
             <button className="back-btn" onClick={() => setVoiceOn((v) => !v)} title="先生の声">
               {voiceOn ? "🔊 声ON" : "🔇 声OFF"}
@@ -282,24 +312,33 @@ function Board({ player, problem, chapterId, onMistake, onExit, confirmBtn = nul
           <button className="back-btn" onClick={onExit}>問題えらび →</button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
-          {/* 左：黒板 */}
-          <div ref={boardRef} style={{
-            flex: 1, minWidth: 0, overflowY: "auto",
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 8 : 12 }}>
+          {/* 黒板（モバイルは上・PCは左） */}
+          <div style={{
+            flex: isMobile ? "1.4 1 0%" : 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column",
             background: "linear-gradient(160deg,#15352b,#0f2a22)",
             border: "10px solid #6b4423", borderRadius: 12,
-            boxShadow: "inset 0 0 60px rgba(0,0,0,.5)", padding: "18px 20px",
+            boxShadow: "inset 0 0 60px rgba(0,0,0,.5)",
             fontFamily: "'Yu Kyokasho','Hiragino Maru Gothic ProN',sans-serif",
           }}>
-            {state.board.map((ln, i) => (
-              <div key={i} style={{ marginBottom: 11, fontSize: 17, lineHeight: 1.5, letterSpacing: ".02em", ...LINE_STYLE[ln.kind], animation: "fadeUp .35s both" }}>
-                {ln.text}
-              </div>
-            ))}
+            {/* 問題文は常に見えるように黒板の一番上へ固定（文章題は説明だけだと分からなくなるため） */}
+            <div style={{ flexShrink: 0, padding: isMobile ? "12px 14px 9px" : "16px 20px 11px",
+              borderBottom: "1px dashed rgba(255,255,255,.22)",
+              fontSize: isMobile ? 14.5 : 16, lineHeight: 1.55, letterSpacing: ".02em", ...LINE_STYLE.problem }}>
+              📌 {problem.problem_text}
+            </div>
+            <div ref={boardRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? "12px 14px" : "14px 20px" }}>
+              {state.board.map((ln, i) => (
+                <div key={i} style={{ marginBottom: 11, fontSize: isMobile ? 15.5 : 17, lineHeight: 1.5, letterSpacing: ".02em", ...LINE_STYLE[ln.kind], animation: "fadeUp .35s both" }}>
+                  {ln.text}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* 右：LINE風のチャット。先生の一言・自分の答えが吹き出しで残っていく */}
-          <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          {/* LINE風のチャット（モバイルは下・PCは右）。先生の一言・自分の答えが吹き出しで残っていく */}
+          <div style={{ width: isMobile ? "100%" : 250, flexShrink: 0, flex: isMobile ? "1 1 0%" : "0 0 auto",
+            maxHeight: isMobile ? "34vh" : undefined, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <div ref={chatRef} className="glass" style={{ flex: 1, minHeight: 0, padding: "12px 10px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 9 }}>
               {chat.map((m) => (m.who === "me" ? (
                 <div key={m.k} style={{ alignSelf: "flex-end", maxWidth: "82%", background: "#86efac", color: "#052e16", borderRadius: "14px 14px 3px 14px", padding: "8px 11px", fontSize: 14.5, fontWeight: 800, animation: "fadeUp .28s both" }}>{m.text}</div>
