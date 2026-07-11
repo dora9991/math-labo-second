@@ -476,7 +476,7 @@ export default function TurnBattle({
       const r = 50 + Math.random() * 60;
       return { i, size: 6 + Math.random() * 9, color: monster.deathColors[i % monster.deathColors.length], tx: Math.cos(ang) * r, ty: Math.sin(ang) * r, rot: Math.random() * 360, round: Math.random() > 0.5 };
     }));
-    setLog(`${monster.name} をたおした！✨ +${monster.reward}XP`);
+    setLog(`${monster.name} をたおした！✨ 💰+${monster.reward}`);
     setTimeout(() => onResult(true, { ...tallyRef.current }), 1500);
   }
 
@@ -504,7 +504,7 @@ export default function TurnBattle({
         <div className="battle-content" style={{ justifyContent: "center", alignItems: "center", textAlign: "center" }}>
           <div style={{ fontSize: 64 }}>{win ? "🎉" : "💀"}</div>
           <div style={{ fontSize: 26, fontWeight: 900, color: win ? "#7fff7f" : "#ff6b6b", textShadow: win ? "0 0 18px #00ff88" : "none" }}>{win ? "勝利！" : "敗北…"}</div>
-          <div style={{ fontSize: 13, color: "#cceebb", margin: "6px 0 14px" }}>{win ? `${monster.name} をたおした！ +${monster.reward}XP を獲得！` : `${monster.name} に やられてしまった…`}</div>
+          <div style={{ fontSize: 13, color: "#cceebb", margin: "6px 0 14px" }}>{win ? `${monster.name} をたおした！ 💰+${monster.reward} を獲得！` : `${monster.name} に やられてしまった…`}</div>
           {win ? (
             <div style={{ display: "flex", gap: 10 }}>
               <button className="bt-choice" style={{ padding: "12px 18px" }} onClick={onExit}>👾 相手を選ぶ</button>
