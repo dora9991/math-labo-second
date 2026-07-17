@@ -27,6 +27,12 @@ const UNIT_FILES = [
   { key: "g2cg", label: "図形の性質と証明", emoji: "📐", color: "#a78bfa", chapterId: "g2c4" },
   { key: "g2pb", label: "確率", emoji: "🎲", color: "#fb923c", chapterId: "g2c6" },
   { key: "g3ex", label: "式の展開と因数分解", emoji: "🧮", color: "#22d3ee", chapterId: "g3c1" },
+  { key: "g3qe", label: "2次方程式", emoji: "2️⃣", color: "#facc15", chapterId: "g3c3" },
+  { key: "g3qf", label: "関数 y=ax²", emoji: "🎢", color: "#e879f9", chapterId: "g3c4" },
+  { key: "g3sm", label: "相似な図形", emoji: "🔍", color: "#c084fc", chapterId: "g3c5" },
+  { key: "g3cr", label: "円の性質", emoji: "⭕", color: "#f87171", chapterId: "g3c6" },
+  { key: "g3py", label: "三平方の定理", emoji: "📏", color: "#38bdf8", chapterId: "g3c7" },
+  { key: "g3sa", label: "標本調査", emoji: "🧪", color: "#4ade80", chapterId: "g3c8" },
 ];
 
 // P0の小単元名(subunit)とアプリの単元(unitId)の対応表は7単元ぶん個別に持たず、
@@ -65,6 +71,12 @@ const UNIT_LOADERS = {
   g2cg: () => import("../data/dialogue/teacherMode/g2cg.json"),
   g2pb: () => import("../data/dialogue/teacherMode/g2pb.json"),
   g3ex: () => import("../data/dialogue/teacherMode/g3ex.json"),
+  g3qe: () => import("../data/dialogue/teacherMode/g3qe.json"),
+  g3qf: () => import("../data/dialogue/teacherMode/g3qf.json"),
+  g3sm: () => import("../data/dialogue/teacherMode/g3sm.json"),
+  g3cr: () => import("../data/dialogue/teacherMode/g3cr.json"),
+  g3py: () => import("../data/dialogue/teacherMode/g3py.json"),
+  g3sa: () => import("../data/dialogue/teacherMode/g3sa.json"),
 };
 
 // 板書1行の色分け（黒板のチョーク色。DialogueLessonのLINE_STYLEと揃える）
