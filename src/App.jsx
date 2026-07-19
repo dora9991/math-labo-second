@@ -13,7 +13,7 @@ import { AUTH_ENABLED } from "./auth/supabase.js";
 import { updateNickname, submitFeedback } from "./auth/kidAuth.js";
 import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
-import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, RELEARN_CRYSTAL_EVERY, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
+import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
 import { updateMastery, levelDifficulty, INITIAL_MASTERY } from "./engine/mastery.js";
 import * as bgm from "./audio/bgm.js";
@@ -67,10 +67,10 @@ import { feedCost, partnerMaxLevel, recruitChance, PARTY_MAX, partnerHpLv, partn
 import { unitFullyStarred, nextCycleCounts, naosuSatisfied, levelAfterClear, reviewMilestonesToGrant, ratchetSkillStats, initDifficulty, nextDifficulty } from "./engine/progress.js";
 import { foldSequence } from "./engine/unitMastery.js";
 import { isUnitMonsterUnlocked, isChapterMastered } from "./engine/unlock.js";
-import { rollChapterSkillGacha, chapterSkillTier, CHAPTER_SKILLS, SKILL_RANK_ORDER_WITH_D } from "./data/chapterSkills.js";
-import { chapterBPCap } from "./engine/battleTurn.js";
-import { findItem as findItemDef, rollItemGacha, ITEM_STOCK_MAX, ITEM_BRING_MAX, ITEM_GACHA_COST } from "./data/items.js";
-import { ULTIMATES, findUltimate, rollUltimateGacha, ULTIMATE_GACHA_COST } from "./data/ultimates.js";
+import { rollChapterSkillGacha, chapterSkillTier, CHAPTER_SKILLS, SKILL_RANK_ORDER_WITH_D, chapterSkillLevelUpCost } from "./data/chapterSkills.js";
+import { chapterBPCap, adjustBP, BP_MIN } from "./engine/battleTurn.js";
+import { findItem as findItemDef, rollItemGacha, ITEM_STOCK_MAX, ITEM_BRING_MAX, itemGachaCost } from "./data/items.js";
+import { ULTIMATES, findUltimate, rollUltimateGacha, ultimateGachaCost } from "./data/ultimates.js";
 import Loadout from "./screens/Loadout.jsx";
 import Items from "./screens/Items.jsx";
 import Ultimates from "./screens/Ultimates.jsx";
@@ -459,6 +459,16 @@ export default function App() {
     if (unit?.id && correct > 0) {
       const mistakeNow = mistakes.some((m) => m.unitId === unit.id);
       bumpCycle(unit.id, { practice: correct, mistakeNow });
+    }
+    // れんしゅう（じっくりモード）の正解でもBPを加算する（中1のみ・バトルと同じ単元別戦闘力）。
+    //  バトルと違い不正解での減算はしない＝練習は安心して打ち込める場にする。
+    if ((chapter?.grade ?? 1) === 1 && correct > 0) {
+      const clearedN = chapter.units.filter((u) => isCalcKingCleared(data.player, u.id)).length;
+      const cap = chapterBPCap(clearedN);
+      updatePlayer((p) => {
+        const nv = adjustBP(p.chapterBP?.[chapter.id] || BP_MIN, correct, cap);
+        return { ...p, chapterBP: { ...(p.chapterBP || {}), [chapter.id]: nv } };
+      });
     }
     // あんしんで★1が新たに付き、その単元のモンスターが解放されたら「新しい敵」を通知する
     if (anshin) {
@@ -941,22 +951,24 @@ export default function App() {
     return rank;
   }
 
-  // 単元別スキルの確定強化（2026-07-19設計）：クリスタル1個消費でランクを1段階アップ（D→C→B→A→S→SS）。
-  //  ガチャではなく確実な強化＝クリスタルの沈み先（小単元ボスの初回撃破で入手）。
-  const SKILL_LEVEL_UP_COST = 1;
+  // 単元別スキルの確定強化（2026-07-19設計、2026-07-19コスト改定）：クリスタルを消費してランクを
+  //  1段階アップ（D→C→B→A→S→SS）。ガチャではなく確実な強化＝クリスタルの沈み先
+  //  （小単元ボスの初回撃破で入手）。段階ごとの必要数は chapterSkillLevelUpCost 参照
+  //  （通常スキル合計12・じかんのよろいだけ合計15＝7スキル全SSでちょうど87＝全学年一周クリア分）。
   function levelUpChapterSkill(chapterId) {
     const cur = data.player.ownedChapterSkills?.[chapterId] || "D";
+    const cost = chapterSkillLevelUpCost(chapterId, cur);
+    if (cost == null) return; // 既にSS
+    if ((data.player.crystals ?? 0) < cost) return;
     const idx = SKILL_RANK_ORDER_WITH_D.indexOf(cur);
-    if (idx < 0 || idx >= SKILL_RANK_ORDER_WITH_D.length - 1) return; // 既にSS
-    if ((data.player.crystals ?? 0) < SKILL_LEVEL_UP_COST) return;
     const next = SKILL_RANK_ORDER_WITH_D[idx + 1];
     updatePlayer((p) => {
       const pCur = p.ownedChapterSkills?.[chapterId] || "D";
-      const pIdx = SKILL_RANK_ORDER_WITH_D.indexOf(pCur);
-      if ((p.crystals ?? 0) < SKILL_LEVEL_UP_COST || pIdx !== idx) return p; // 二重クリック防止
+      const pCost = chapterSkillLevelUpCost(chapterId, pCur);
+      if (pCost == null || (p.crystals ?? 0) < pCost || pCur !== cur) return p; // 二重クリック防止
       return {
         ...p,
-        crystals: (p.crystals ?? 0) - SKILL_LEVEL_UP_COST,
+        crystals: (p.crystals ?? 0) - pCost,
         ownedChapterSkills: { ...(p.ownedChapterSkills || {}), [chapterId]: next },
       };
     });
@@ -972,18 +984,26 @@ export default function App() {
     });
   }
 
-  // アイテムガチャ（2026-07-19復活）：💰ITEM_GACHA_COSTで1個。ストックは合計ITEM_STOCK_MAXまで。
+  // アイテムガチャ（2026-07-19復活・同日値上げ）：その日1回目150G、1回ごとに+50G、翌日リセット。ストックは合計ITEM_STOCK_MAXまで。
+  // その日すでに何回ガチャを引いたか（日付が変わっていれば0）
+  function itemGachaPullsToday(p) {
+    return p.itemGachaLastPullDate === todayStr() ? (p.itemGachaPullsToday || 0) : 0;
+  }
+
   function pullItemGacha() {
-    if ((data.player.coins ?? 0) < ITEM_GACHA_COST) return null;
+    const cost = itemGachaCost(itemGachaPullsToday(data.player));
+    if ((data.player.coins ?? 0) < cost) return null;
     const stockTotal = Object.values(data.player.items || {}).reduce((a, b) => a + (b || 0), 0);
     if (stockTotal >= ITEM_STOCK_MAX) return null;
     const id = rollItemGacha();
     updatePlayer((p) => {
+      const pToday = itemGachaPullsToday(p);
+      const pCost = itemGachaCost(pToday);
       const total = Object.values(p.items || {}).reduce((a, b) => a + (b || 0), 0);
-      if ((p.coins ?? 0) < ITEM_GACHA_COST || total >= ITEM_STOCK_MAX) return p; // 二重引き防止
+      if ((p.coins ?? 0) < pCost || total >= ITEM_STOCK_MAX) return p; // 二重引き防止
       const items = { ...(p.items || {}) };
       items[id] = (items[id] || 0) + 1;
-      return { ...p, coins: (p.coins ?? 0) - ITEM_GACHA_COST, items };
+      return { ...p, coins: (p.coins ?? 0) - pCost, items, itemGachaPullsToday: pToday + 1, itemGachaLastPullDate: todayStr() };
     });
     return findItemDef(id);
   }
@@ -1015,17 +1035,24 @@ export default function App() {
     });
   }
 
-  // 必殺技ガチャ（2026-07-19設計）：💰ULTIMATE_GACHA_COSTで1個。所持済みは対象外（ダブりなし）。
+  // 必殺技ガチャ（2026-07-19設計・同日20種に拡張＆値上げ）：1回目700G、1回ごとに+200G（リセット無し）。所持済みは対象外（ダブりなし）。
+  // すでに何回引いたか＝ダブり無しガチャなので所持数-1（最初から持っている1つぶんを引く）で求まる
+  function ultimateGachaPullsSoFar(p) {
+    return Math.max(0, Object.keys(p.ownedUltimates || { fire: true }).length - 1);
+  }
+
   function pullUltimateGacha() {
-    if ((data.player.coins ?? 0) < ULTIMATE_GACHA_COST) return null;
+    const cost = ultimateGachaCost(ultimateGachaPullsSoFar(data.player));
+    if ((data.player.coins ?? 0) < cost) return null;
     const owned = data.player.ownedUltimates || {};
     const pool = ULTIMATES.filter((u) => !owned[u.id]);
     if (pool.length === 0) return null; // 全部所持済み
     const id = rollUltimateGacha(pool);
     updatePlayer((p) => {
       const pOwned = p.ownedUltimates || {};
-      if ((p.coins ?? 0) < ULTIMATE_GACHA_COST || pOwned[id]) return p; // 二重引き防止
-      return { ...p, coins: (p.coins ?? 0) - ULTIMATE_GACHA_COST, ownedUltimates: { ...pOwned, [id]: true } };
+      const pCost = ultimateGachaCost(ultimateGachaPullsSoFar(p));
+      if ((p.coins ?? 0) < pCost || pOwned[id]) return p; // 二重引き防止
+      return { ...p, coins: (p.coins ?? 0) - pCost, ownedUltimates: { ...pOwned, [id]: true } };
     });
     return findUltimate(id);
   }
@@ -1867,7 +1894,7 @@ export default function App() {
     );
   }
 
-  // 学び直しの練習（時間制限なし・1問15XP＝1.5倍・15問ごとに💎+1・StepUpSimpleを流用）
+  // 学び直しの練習（時間制限なし・1問15XP＝1.5倍・クリスタルは出ない・StepUpSimpleを流用）
   if (screen === "relearnPractice" && practiceUnit) {
     const rlPhase = relearnPhase(practiceUnit.id);
     // 翌日確認（confirm）は「あと1問」なので短く、その場（fresh）は2連続正解を狙うので少し長め。

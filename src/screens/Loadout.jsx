@@ -9,12 +9,11 @@
 // ============================================================
 import { useState } from "react";
 import Header from "../components/Header.jsx";
-import { CHAPTER_SKILLS, chapterSkillTier, SKILL_RANK_ORDER_WITH_D } from "../data/chapterSkills.js";
+import { CHAPTER_SKILLS, chapterSkillTier, SKILL_RANK_ORDER_WITH_D, chapterSkillLevelUpCost } from "../data/chapterSkills.js";
 import { chaptersForGrade } from "../data/index.js";
 import * as sfx from "../audio/sfx.js";
 
 const RANK_COLOR = { D: "#94a3b8", C: "#4ade80", B: "#38bdf8", A: "#a78bfa", S: "#f472b6", SS: "#fde047" };
-const LEVEL_UP_COST = 1;
 
 function tierSummary(chapterId, rank) {
   const t = chapterSkillTier(chapterId, rank);
@@ -47,6 +46,7 @@ export default function Loadout({ player, onToggle, onLevelUp, onBack }) {
   const confirmDef = confirmId ? CHAPTER_SKILLS[confirmId] : null;
   const confirmRank = confirmId ? (owned[confirmId] || "D") : null;
   const confirmNext = confirmRank ? SKILL_RANK_ORDER_WITH_D[SKILL_RANK_ORDER_WITH_D.indexOf(confirmRank) + 1] : null;
+  const confirmCost = confirmId ? chapterSkillLevelUpCost(confirmId, confirmRank) : null;
 
   return (
     <div className="app">
@@ -72,7 +72,8 @@ export default function Loadout({ player, onToggle, onLevelUp, onBack }) {
             const isEq = equipped.includes(ch.id);
             const canEquip = isEq || equipped.length < 2;
             const isMaxRank = rank === "SS";
-            const canLevelUp = !isMaxRank && crystals >= LEVEL_UP_COST;
+            const levelUpCost = chapterSkillLevelUpCost(ch.id, rank);
+            const canLevelUp = !isMaxRank && crystals >= levelUpCost;
             const nextRank = SKILL_RANK_ORDER_WITH_D[SKILL_RANK_ORDER_WITH_D.indexOf(rank) + 1];
             return (
               <div
@@ -117,7 +118,7 @@ export default function Loadout({ player, onToggle, onLevelUp, onBack }) {
                       color: canLevelUp ? "#67e8f9" : "rgba(255,255,255,.35)",
                     }}
                   >
-                    {isMaxRank ? "SS（最大）" : `🔺 ${nextRank}へ（💎${LEVEL_UP_COST}）`}
+                    {isMaxRank ? "SS（最大）" : `🔺 ${nextRank}へ（💎${levelUpCost}）`}
                   </button>
                 )}
               </div>
@@ -133,7 +134,7 @@ export default function Loadout({ player, onToggle, onLevelUp, onBack }) {
             <div style={{ fontSize: 32, marginBottom: 8 }}>{confirmDef.icon}</div>
             <div style={{ fontSize: 15, fontWeight: 900, color: "#fff", marginBottom: 6 }}>「{confirmDef.name}」をレベルアップしますか？</div>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: "#67e8f9", marginBottom: 18 }}>
-              {confirmRank}ランク → {confirmNext}ランク（💎{LEVEL_UP_COST}消費）
+              {confirmRank}ランク → {confirmNext}ランク（💎{confirmCost}消費）
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setConfirmId(null)} data-sfx="none" style={{

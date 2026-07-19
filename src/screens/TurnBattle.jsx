@@ -119,6 +119,7 @@ export default function TurnBattle({
   const [enemyFx, setEnemyFx] = useState(null);         // { icon, label, color }
   const [skillFx, setSkillFx] = useState(null);         // { name, icon, color, big }
   const [statusTags, setStatusTags] = useState([]);     // プレイヤーの状態異常/バフ表示
+  const [monsterStatusTags, setMonsterStatusTags] = useState([]); // 敵の状態異常表示（必殺技で付与）
   const [deadParticles, setDeadParticles] = useState([]);
   const [maxSp] = useState(TURN_SP_MAX);
 
@@ -150,8 +151,12 @@ export default function TurnBattle({
   const burstGuardRef = useRef(null);    // { turns, reduce } ため技・必殺技の被ダメ軽減（みやぶり）
   const multiGuardRef = useRef(null);    // { turns, reduce } 連続攻撃の被ダメ軽減（みきりのかまえ）
   const itemGuardRef = useRef(null);     // { turns, reduce } アイテム「守りのお守り」＝あらゆる被ダメを軽減
+  const regenRef = useRef(null);         // { turns, pct } アイテムの継続回復（毎ターン最大HPの%ぶん回復）
   const guardActiveRef = useRef(false);  // このターン「防御」を選び成功した
   const enemyGuardRef = useRef(0);       // 敵が身を守っている（こちらの攻撃を無効）残回数
+  // 敵の状態異常（一部の必殺技で付与。強くなりすぎないよう毒は少量固定・しびれは低確率&1ターンのみ）
+  const monsterPoisonRef = useRef(null); // { turns, dmg } 敵にかけた毒
+  const monsterStunRef = useRef(0);      // 敵がしびれて動けない 残ターン
 
   useEffect(() => { hpRef.current = playerHp; }, [playerHp]);
   useEffect(() => { monHpRef.current = monsterHp; }, [monsterHp]);
@@ -195,10 +200,19 @@ export default function TurnBattle({
     if (burstGuardRef.current) t.push({ icon: "👁️", color: "#60a5fa", label: `みやぶり${burstGuardRef.current.turns}` });
     if (multiGuardRef.current) t.push({ icon: "🥋", color: "#34d399", label: `みきり${multiGuardRef.current.turns}` });
     if (itemGuardRef.current) t.push({ icon: "🛡️", color: "#93c5fd", label: `お守り${itemGuardRef.current.turns}` });
+    if (regenRef.current) t.push({ icon: "🍃", color: "#86efac", label: `回復中${regenRef.current.turns}` });
     if (immSleepRef.current > 0) t.push({ icon: "⏰", color: "#38bdf8", label: `眠無${immSleepRef.current}` });
     if (immPoisonRef.current > 0) t.push({ icon: "🧪", color: "#a3e635", label: `毒無${immPoisonRef.current}` });
     if (immTimejamRef.current > 0) t.push({ icon: "🛡️", color: "#c4b5fd", label: `時間妨害無${immTimejamRef.current}` });
     setStatusTags(t);
+  }
+
+  // ── 敵の状態異常タグの再計算（一部の必殺技で付与） ──
+  function refreshMonsterTags() {
+    const t = [];
+    if (monsterPoisonRef.current) t.push({ icon: "☠️", color: "#a3e635", label: `どく${monsterPoisonRef.current.turns}` });
+    if (monsterStunRef.current > 0) t.push({ icon: "💫", color: "#facc15", label: `しびれ${monsterStunRef.current}` });
+    setMonsterStatusTags(t);
   }
 
   function showEnemyFx(fx) { setEnemyFx(fx); setTimeout(() => setEnemyFx(null), 1100); }
@@ -333,7 +347,7 @@ export default function TurnBattle({
     // 攻撃 / 必殺技
     const isUlt = p.type === "ultimate";
     if (isUlt) changeSp(spRef.current - ULT_COST);
-    let dmg = isUlt ? baseDmg * ultMult : baseDmg;
+    let dmg = Math.round(isUlt ? baseDmg * ultMult : baseDmg); // 必殺技の倍率は3.5倍などの小数もあるため四捨五入
     if (dmgBuffRef.current) dmg = Math.round(dmg * dmgBuffRef.current.mult);
     // 敵が「まもり」中なら攻撃を無効化（1回消費）
     if (enemyGuardRef.current > 0) {
@@ -358,6 +372,18 @@ export default function TurnBattle({
         hpRef.current = nvHp; setPlayerHp(nvHp);
         setLog((l) => l + ` 🩸吸収+${healAmt}`);
       }
+    }
+    // 状態異常つき必殺技：敵を倒しきれなかった時だけ毒／しびれを付与（強くなりすぎないよう控えめ）
+    if (isUlt && nv > 0 && ultimateDef.inflict) {
+      const inf = ultimateDef.inflict;
+      if (inf.kind === "poison") {
+        monsterPoisonRef.current = { turns: inf.turns, dmg: inf.dmg };
+        setLog((l) => l + ` ☠️${monster.name}に毒を付けた！`);
+      } else if (inf.kind === "stun" && Math.random() < (inf.chance ?? 1)) {
+        monsterStunRef.current = inf.turns;
+        setLog((l) => l + ` 💫${monster.name}はしびれた！`);
+      }
+      refreshMonsterTags();
     }
     if (nv <= 0) { setTimeout(triggerWin, 700); return; }
     checkBossPhase(nv);
@@ -400,13 +426,17 @@ export default function TurnBattle({
     sfx.skill();
     setSkillFx({ name: it.name, icon: it.icon, color: it.color || "#fff" });
     setTimeout(() => setSkillFx(null), 1400);
-    if (it.kind === "heal") {
-      const nv = Math.min(maxHp, hpRef.current + it.power);
+    if (it.kind === "healPct") {
+      const healAmt = Math.round(maxHp * it.pct);
+      const nv = Math.min(maxHp, hpRef.current + healAmt);
       hpRef.current = nv; setPlayerHp(nv);
-      setLog(`${it.icon} ${it.name}！ HPが${it.power}回復した！`);
+      setLog(`${it.icon} ${it.name}！ HPが${healAmt}（最大の${Math.round(it.pct * 100)}%）回復した！`);
     } else if (it.kind === "sp") {
       changeSp(spRef.current + it.power);
       setLog(`${it.icon} ${it.name}！ SPが${it.power}回復した！`);
+    } else if (it.kind === "regenPct") {
+      regenRef.current = { turns: it.turns || 3, pct: it.regenPct || 0.2 };
+      setLog(`${it.icon} ${it.name}！ ${it.turns}ターン 毎ターンHPが最大の${Math.round((it.regenPct || 0.2) * 100)}%回復する！`);
     } else if (it.kind === "curePoison") {
       poisonRef.current = 0;
       setLog(`${it.icon} ${it.name}！ どくが治った！`);
@@ -426,6 +456,28 @@ export default function TurnBattle({
   // ============ 敵ターン ============
   function enemyPhase() {
     if (endedRef.current) return;
+    // 敵の毒（必殺技で付与）：敵ターンの頭にダメージを与える
+    if (monsterPoisonRef.current) {
+      const pd = monsterPoisonRef.current.dmg;
+      const nvPoison = Math.max(0, monHpRef.current - pd);
+      monHpRef.current = nvPoison; setMonsterHp(nvPoison);
+      setLog(`☠️ どくで ${monster.name} に ${pd}ダメージ！`);
+      monsterPoisonRef.current.turns -= 1;
+      if (monsterPoisonRef.current.turns <= 0) monsterPoisonRef.current = null;
+      refreshMonsterTags();
+      if (nvPoison <= 0) { setTimeout(triggerWin, 500); return; }
+      checkBossPhase(nvPoison);
+    }
+    // 敵のしびれ（必殺技で付与）：行動できず1ターン休み
+    if (monsterStunRef.current > 0) {
+      monsterStunRef.current -= 1;
+      refreshMonsterTags();
+      setMonState("idle"); setAnimKey((k) => k + 1);
+      showEnemyFx({ icon: "💫", label: "しびれて動けない！", color: "#facc15" });
+      setLog(`${monster.name} はしびれて動けない…！`);
+      afterEnemy();
+      return;
+    }
     // ボスの梯子(patternPool持ち)はターンごとに使う技をランダムに選ぶ
     if (monster.patternPool) {
       const picked = pickBossPattern(monster, aiStateRef.current);
@@ -601,6 +653,15 @@ export default function TurnBattle({
         setLog((l) => l + ` ☠️毒 -${poisonDmg}`);
         if (nv <= 0) { setTimeout(triggerLose, 400); return; }
       }
+      // 継続回復（アイテム「癒しの葉」等）：ターン末に最大HPの%ぶん回復＋残ターン減
+      if (regenRef.current) {
+        const healAmt = Math.round(maxHp * regenRef.current.pct);
+        const nv = Math.min(maxHp, hpRef.current + healAmt);
+        hpRef.current = nv; setPlayerHp(nv);
+        setLog((l) => l + ` 🍃回復+${healAmt}`);
+        regenRef.current.turns -= 1;
+        if (regenRef.current.turns <= 0) regenRef.current = null;
+      }
       // バフ・軽減の残ターン減衰
       if (dmgBuffRef.current) { dmgBuffRef.current.turns -= 1; if (dmgBuffRef.current.turns <= 0) dmgBuffRef.current = null; }
       if (burstGuardRef.current) { burstGuardRef.current.turns -= 1; if (burstGuardRef.current.turns <= 0) burstGuardRef.current = null; }
@@ -703,6 +764,13 @@ export default function TurnBattle({
             <span className="bt-hp-num">{Math.max(0, monsterHp)} / {monMaxHp}</span>
           </div>
           {enemyGuardRef.current > 0 && <div style={{ fontSize: 11, fontWeight: 900, color: "#93c5fd", marginTop: 2 }}>🛡️ まもり中（こうげきが通らない）</div>}
+          {monsterStatusTags.length > 0 && (
+            <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+              {monsterStatusTags.map((t, i) => (
+                <span key={i} style={{ fontSize: 11, fontWeight: 800, color: t.color, filter: `drop-shadow(0 0 3px ${t.color})` }}>{t.icon}{t.label}</span>
+              ))}
+            </div>
+          )}
           {(() => {
             const MOVE_LABEL = { attack: "👊こうげき", burst: "💥ためた一撃", multi: "✊連続", sleep: "😴ねむらせ", guard: "🛡️まもり", poison: "☠️どく", timejam: "⏳時間妨害", paralysis: "⚡まひ" };
             const seen = Object.keys(dexMovesRef.current).map((k) => MOVE_LABEL[k]).filter(Boolean);

@@ -7,7 +7,7 @@
 // ============================================================
 import { useState } from "react";
 import Header from "../components/Header.jsx";
-import { ITEMS, itemSummary, ITEM_STOCK_MAX, ITEM_BRING_MAX, ITEM_GACHA_COST } from "../data/items.js";
+import { ITEMS, itemSummary, ITEM_STOCK_MAX, ITEM_BRING_MAX, itemGachaCost } from "../data/items.js";
 import * as sfx from "../audio/sfx.js";
 
 export default function Items({ player, onPull, onToggle, onBack }) {
@@ -17,7 +17,11 @@ export default function Items({ player, onPull, onToggle, onBack }) {
   const stockTotal = Object.values(stock).reduce((a, b) => a + (b || 0), 0);
   const [result, setResult] = useState(null); // ガチャで出たアイテム（演出）
 
-  const canPull = coins >= ITEM_GACHA_COST && stockTotal < ITEM_STOCK_MAX;
+  // その日すでに何回引いたか（日付が変わっていれば0にリセット。App.jsxのtodayStr()と同じ形式）
+  const todayJa = new Date().toLocaleDateString("ja-JP");
+  const pullsToday = player.itemGachaLastPullDate === todayJa ? (player.itemGachaPullsToday || 0) : 0;
+  const cost = itemGachaCost(pullsToday);
+  const canPull = coins >= cost && stockTotal < ITEM_STOCK_MAX;
 
   function doPull() {
     if (!canPull) return;
@@ -58,8 +62,10 @@ export default function Items({ player, onPull, onToggle, onBack }) {
             color: canPull ? "#fff" : "rgba(255,255,255,.4)", fontWeight: 900, fontSize: 14, textAlign: "center",
           }}
         >
-          🎰 アイテムガチャを回す（💰{ITEM_GACHA_COST}）
-          {stockTotal >= ITEM_STOCK_MAX && <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>ストックがいっぱい！使ってから引こう</div>}
+          🎰 アイテムガチャを回す（💰{cost}）
+          <div style={{ fontSize: 9.5, fontWeight: 700, marginTop: 3, opacity: 0.85 }}>
+            {stockTotal >= ITEM_STOCK_MAX ? "ストックがいっぱい！使ってから引こう" : "1回ごとに+50G・翌日また150Gから"}
+          </div>
         </button>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

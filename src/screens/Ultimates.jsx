@@ -7,8 +7,15 @@
 // ============================================================
 import { useState } from "react";
 import Header from "../components/Header.jsx";
-import { ULTIMATES, ultimateMult, ULTIMATE_GACHA_COST } from "../data/ultimates.js";
+import { ULTIMATES, ultimateMult, ultimateGachaCost } from "../data/ultimates.js";
 import * as sfx from "../audio/sfx.js";
+
+function inflictSummary(inf) {
+  if (!inf) return "";
+  if (inf.kind === "poison") return `毒${inf.turns}T`;
+  if (inf.kind === "stun") return `しびれ${Math.round(inf.chance * 100)}%`;
+  return "";
+}
 
 export default function Ultimates({ player, onPull, onEquip, onBack }) {
   const owned = player.ownedUltimates || {};
@@ -18,7 +25,10 @@ export default function Ultimates({ player, onPull, onEquip, onBack }) {
   const allOwned = ownedCount >= ULTIMATES.length;
   const [result, setResult] = useState(null); // ガチャで出た必殺技（演出）
 
-  const canPull = !allOwned && coins >= ULTIMATE_GACHA_COST;
+  // ダブり無しガチャなので、すでに引いた回数＝所持数-1（最初の1つは無償配布）
+  const pullsSoFar = Math.max(0, ownedCount - 1);
+  const cost = ultimateGachaCost(pullsSoFar);
+  const canPull = !allOwned && coins >= cost;
 
   function doPull() {
     if (!canPull) return;
@@ -56,8 +66,10 @@ export default function Ultimates({ player, onPull, onEquip, onBack }) {
             color: canPull ? "#fff" : "rgba(255,255,255,.4)", fontWeight: 900, fontSize: 14, textAlign: "center",
           }}
         >
-          🎰 必殺技ガチャを回す（💰{ULTIMATE_GACHA_COST}）
-          {allOwned && <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>ぜんぶ集めたよ！</div>}
+          🎰 必殺技ガチャを回す（💰{cost}）
+          <div style={{ fontSize: 9.5, fontWeight: 700, marginTop: 3, opacity: 0.85 }}>
+            {allOwned ? "ぜんぶ集めたよ！" : "1回ごとに+200G（リセットなし）"}
+          </div>
         </button>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -81,7 +93,7 @@ export default function Ultimates({ player, onPull, onEquip, onBack }) {
                 </div>
                 <div style={{ fontSize: 9.5, color: "#88aa88", marginTop: 4, lineHeight: 1.3 }}>{have ? u.desc : "ガチャで手に入るよ"}</div>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "#cceebb", marginTop: 3, lineHeight: 1.3 }}>
-                  倍率 {ultimateMult(u)}倍{u.lifesteal ? ` ・ 吸収${Math.round(u.lifesteal * 100)}%` : ""}
+                  倍率 {ultimateMult(u)}倍{u.lifesteal ? ` ・ 吸収${Math.round(u.lifesteal * 100)}%` : ""}{u.inflict ? ` ・ ${inflictSummary(u.inflict)}` : ""}
                 </div>
                 {have && (
                   <button

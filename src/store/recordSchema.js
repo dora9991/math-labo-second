@@ -99,6 +99,8 @@ export function initialPlayerState(studentId) {
     item: null,        // 所持アイテム（id 文字列。1つだけ持てる。バトルで使うと消費）
     items: {},         // 新アイテムシステム（2026-07-19復活・ガチャ方式）：{ itemId: 個数 }。合計10個までストック
     equippedItems: [], // バトルに持ち込むアイテム（最大2種類、itemIdの配列）
+    itemGachaPullsToday: 0,      // アイテムガチャ：今日すでに引いた回数（価格が1回ごとに+50G）
+    itemGachaLastPullDate: null, // 最後にアイテムガチャを引いた日（変わったらpullsTodayを0に戻す）
     ownedUltimates: { fire: true }, // 所持している必殺技（ガチャで獲得。最初から「ファイアバースト」を1つ持っている）
     equippedUltimate: "fire", // 装備中の必殺技id（data/ultimates.js DEFAULT_ULTIMATE_IDと一致）
     // ガチャ装備：owned={id:個数}, 装備中の武器/防具id。初期から「剣＋盾」を装備して持っている。
@@ -214,5 +216,7 @@ export function normalizePlayerState(p) {
   out.ownedUltimates = (p.ownedUltimates && typeof p.ownedUltimates === "object" && Object.keys(p.ownedUltimates).length)
     ? p.ownedUltimates : { fire: true };
   out.equippedUltimate = (p.equippedUltimate && out.ownedUltimates[p.equippedUltimate]) ? p.equippedUltimate : "fire";
+  out.itemGachaPullsToday = Number.isFinite(p.itemGachaPullsToday) ? p.itemGachaPullsToday : 0;
+  out.itemGachaLastPullDate = p.itemGachaLastPullDate || null;
   return out;
 }

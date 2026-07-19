@@ -127,10 +127,9 @@ export const XP_PER_CORRECT = 5;
 export const XP_PENALTY_PER_WRONG = 3;
 
 // ── 学び直しの報酬（学習のコア）─────────────────────
-// 1問の正解XPは通常じっくり(10)の1.5倍＝15。さらに RELEARN_CRYSTAL_EVERY 問
-// 解くごとにクリスタルを+1（コツコツ取り組むほどスキルガチャ資金がたまる）。
+// 1問の正解XPは通常じっくり(10)の1.5倍＝15。
+// ※クリスタルは学び直しからは出さない（サイクルクリア＝1単元1個だけに一本化）。
 export const RELEARN_XP_PER_CORRECT = 15;
-export const RELEARN_CRYSTAL_EVERY = 15;
 
 // ── 学び直しの合格基準（2段階：その場＝2連続 → 翌日以降＝1問で確定）──
 // 旧「単元5問ぜんぶ正解で即消し」を廃止。理由：1ミスで4問ぶんの成果が消える罰性、

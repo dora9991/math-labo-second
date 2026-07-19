@@ -19,10 +19,17 @@ export const CHAPTER_ENEMY_PATTERN = {
   c1: "attack", c2: "charge", c3: "sleep", c4: "poison", c5: "multi", c6: "timejam", c7: "paralysis",
 };
 
+// D→C→B→A→S→SSの5段階レベルアップに必要なクリスタル数（各段階ぶん）。
+//  通常スキル(cost:2)は合計12、じかんのよろい(cost:3)だけ合計15＝重め。
+//  7スキル全部を合計SSまで上げると 12×6+15 = 87 で、全学年(中1〜3)を一周クリアした
+//  ぶんのクリスタル(87個・2026-07-19時点)でちょうど賄える設計（詳細はREADME等は無く本コメントが根拠）。
+const STANDARD_LEVEL_COSTS = [1, 2, 2, 3, 4];   // 合計12
+const PREMIUM_LEVEL_COSTS = [1, 2, 3, 4, 5];    // 合計15（じかんのよろい専用）
+
 // 章ID → スキル定義。tiers は D〜SS の6段階。
 export const CHAPTER_SKILLS = {
   c1: {
-    name: "ちからをこめる", icon: "💪", kind: "dmgup", cost: 2,
+    name: "ちからをこめる", icon: "💪", kind: "dmgup", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "与ダメバフ",
     // 2026-07-19：「2ターン+35%だと普通に1ターン殴った方がいい」というフィードバックで
     // 全ランクの上乗せ率(mult-1)を一律+50%（例：+35%→+52.5%）に引き上げ。
@@ -36,7 +43,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c2: {
-    name: "みやぶり", icon: "👁️", kind: "burstGuard", cost: 2,
+    name: "みやぶり", icon: "👁️", kind: "burstGuard", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "ため技・必殺技の被ダメ軽減",
     tiers: {
       D:  { turns: 1, reduce: 0.50 },
@@ -48,7 +55,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c3: {
-    name: "めざまし", icon: "⏰", kind: "immSleep", cost: 2,
+    name: "めざまし", icon: "⏰", kind: "immSleep", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "睡眠無効",
     tiers: {
       D:  { turns: 3 },
@@ -60,7 +67,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c4: {
-    name: "どくけし", icon: "🧪", kind: "immPoison", cost: 2,
+    name: "どくけし", icon: "🧪", kind: "immPoison", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "毒無効",
     tiers: {
       D:  { turns: 3 },
@@ -72,7 +79,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c5: {
-    name: "みきりのかまえ", icon: "🥋", kind: "multiGuard", cost: 2,
+    name: "みきりのかまえ", icon: "🥋", kind: "multiGuard", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "連続攻撃の被ダメ軽減",
     tiers: {
       D:  { turns: 1, reduce: 0.50 },
@@ -84,7 +91,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c6: {
-    name: "じかんのよろい", icon: "🛡️", kind: "immTimejam", cost: 3,
+    name: "じかんのよろい", icon: "🛡️", kind: "immTimejam", cost: 3, levelCosts: PREMIUM_LEVEL_COSTS,
     theme: "時間妨害無効",
     tiers: {
       D:  { turns: 2 },
@@ -96,7 +103,7 @@ export const CHAPTER_SKILLS = {
     },
   },
   c7: {
-    name: "まひふうじ", icon: "🚫", kind: "paralysisResist", cost: 2,
+    name: "まひふうじ", icon: "🚫", kind: "paralysisResist", cost: 2, levelCosts: STANDARD_LEVEL_COSTS,
     theme: "麻痺耐性",
     tiers: {
       D:  { reduce: 0.20 },
@@ -135,4 +142,12 @@ export function chapterSkillTier(chapterId, rank) {
 /** chapterIdからスキル定義そのものを引く */
 export function findChapterSkill(chapterId) {
   return CHAPTER_SKILLS[chapterId] || null;
+}
+
+/** そのスキルを currentRank から1段階上げるのに必要なクリスタル数（最大SSならnull） */
+export function chapterSkillLevelUpCost(chapterId, currentRank) {
+  const def = CHAPTER_SKILLS[chapterId];
+  const idx = SKILL_RANK_ORDER_WITH_D.indexOf(currentRank);
+  if (!def || idx < 0 || idx >= SKILL_RANK_ORDER_WITH_D.length - 1) return null;
+  return def.levelCosts[idx];
 }
