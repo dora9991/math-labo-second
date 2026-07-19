@@ -66,7 +66,15 @@ import Partners from "./screens/Partners.jsx";
 import { feedCost, partnerMaxLevel, recruitChance, PARTY_MAX, partnerHpLv, partnerAtkLv } from "./engine/partners.js";
 import { unitFullyStarred, nextCycleCounts, naosuSatisfied, levelAfterClear, reviewMilestonesToGrant, ratchetSkillStats, initDifficulty, nextDifficulty } from "./engine/progress.js";
 import { foldSequence } from "./engine/unitMastery.js";
-import { isUnitMonsterUnlocked } from "./engine/unlock.js";
+import { isUnitMonsterUnlocked, isChapterMastered } from "./engine/unlock.js";
+import { rollChapterSkillGacha, chapterSkillTier, CHAPTER_SKILLS, SKILL_RANK_ORDER_WITH_D } from "./data/chapterSkills.js";
+import { chapterBPCap } from "./engine/battleTurn.js";
+import { findItem as findItemDef, rollItemGacha, ITEM_STOCK_MAX, ITEM_BRING_MAX, ITEM_GACHA_COST } from "./data/items.js";
+import { ULTIMATES, findUltimate, rollUltimateGacha, ULTIMATE_GACHA_COST } from "./data/ultimates.js";
+import Loadout from "./screens/Loadout.jsx";
+import Items from "./screens/Items.jsx";
+import Ultimates from "./screens/Ultimates.jsx";
+import StatusMeter from "./screens/StatusMeter.jsx";
 import { challengeXp } from "./data/challenge.js";
 import { CHAPTERS, LEVEL_KEYS, chaptersForGrade, allChapters, findChapterByUnitId, findUnitById, findChapterById } from "./data/index.js";
 import { getWeakUnits, buildWeakUnit } from "./engine/weakness.js";
@@ -920,6 +928,116 @@ export default function App() {
     return results;
   }
 
+  // 単元別スキルガチャ（2026-07-18設計）：その章が計算マスターになっていれば1回だけ引ける（無償）。
+  //  結果ランク("C"〜"SS")を player.ownedChapterSkills[chapterId] に記録する。
+  function claimChapterSkillGacha(chapterId) {
+    if (!isChapterMastered(data.player, chapterId)) return null;
+    if (data.player.ownedChapterSkills?.[chapterId]) return null; // 二重取得防止
+    const rank = rollChapterSkillGacha();
+    updatePlayer((p) => {
+      if (p.ownedChapterSkills?.[chapterId]) return p; // 二重引き防止
+      return { ...p, ownedChapterSkills: { ...(p.ownedChapterSkills || {}), [chapterId]: rank } };
+    });
+    return rank;
+  }
+
+  // 単元別スキルの確定強化（2026-07-19設計）：クリスタル1個消費でランクを1段階アップ（D→C→B→A→S→SS）。
+  //  ガチャではなく確実な強化＝クリスタルの沈み先（小単元ボスの初回撃破で入手）。
+  const SKILL_LEVEL_UP_COST = 1;
+  function levelUpChapterSkill(chapterId) {
+    const cur = data.player.ownedChapterSkills?.[chapterId] || "D";
+    const idx = SKILL_RANK_ORDER_WITH_D.indexOf(cur);
+    if (idx < 0 || idx >= SKILL_RANK_ORDER_WITH_D.length - 1) return; // 既にSS
+    if ((data.player.crystals ?? 0) < SKILL_LEVEL_UP_COST) return;
+    const next = SKILL_RANK_ORDER_WITH_D[idx + 1];
+    updatePlayer((p) => {
+      const pCur = p.ownedChapterSkills?.[chapterId] || "D";
+      const pIdx = SKILL_RANK_ORDER_WITH_D.indexOf(pCur);
+      if ((p.crystals ?? 0) < SKILL_LEVEL_UP_COST || pIdx !== idx) return p; // 二重クリック防止
+      return {
+        ...p,
+        crystals: (p.crystals ?? 0) - SKILL_LEVEL_UP_COST,
+        ownedChapterSkills: { ...(p.ownedChapterSkills || {}), [chapterId]: next },
+      };
+    });
+  }
+
+  // ロードアウト：装備する単元別スキルを最大2つまでトグルで選ぶ
+  function toggleEquippedChapterSkill(chapterId) {
+    updatePlayer((p) => {
+      const cur = p.equippedSkills || [];
+      if (cur.includes(chapterId)) return { ...p, equippedSkills: cur.filter((id) => id !== chapterId) };
+      if (cur.length >= 2) return p; // 2枠まで
+      return { ...p, equippedSkills: [...cur, chapterId] };
+    });
+  }
+
+  // アイテムガチャ（2026-07-19復活）：💰ITEM_GACHA_COSTで1個。ストックは合計ITEM_STOCK_MAXまで。
+  function pullItemGacha() {
+    if ((data.player.coins ?? 0) < ITEM_GACHA_COST) return null;
+    const stockTotal = Object.values(data.player.items || {}).reduce((a, b) => a + (b || 0), 0);
+    if (stockTotal >= ITEM_STOCK_MAX) return null;
+    const id = rollItemGacha();
+    updatePlayer((p) => {
+      const total = Object.values(p.items || {}).reduce((a, b) => a + (b || 0), 0);
+      if ((p.coins ?? 0) < ITEM_GACHA_COST || total >= ITEM_STOCK_MAX) return p; // 二重引き防止
+      const items = { ...(p.items || {}) };
+      items[id] = (items[id] || 0) + 1;
+      return { ...p, coins: (p.coins ?? 0) - ITEM_GACHA_COST, items };
+    });
+    return findItemDef(id);
+  }
+
+  // アイテムのバトル持ち込み：最大ITEM_BRING_MAXまでトグルで選ぶ
+  function toggleEquippedItem(itemId) {
+    updatePlayer((p) => {
+      const cur = p.equippedItems || [];
+      if (cur.includes(itemId)) return { ...p, equippedItems: cur.filter((id) => id !== itemId) };
+      if (cur.length >= ITEM_BRING_MAX) return p;
+      return { ...p, equippedItems: [...cur, itemId] };
+    });
+  }
+
+  // バトル中にアイテムを使用：ストックを1個消費（効果自体はTurnBattle側で即時適用）
+  //  ストックが0になったら持ち込み枠(equippedItems)からも外す（幽霊装備防止：外さないと
+  //  リロードするまで持ち込み枠が使用不能のまま固まってしまうため）。
+  function useBattleItem(itemId) {
+    updatePlayer((p) => {
+      const items = { ...(p.items || {}) };
+      if (!items[itemId]) return p;
+      items[itemId] -= 1;
+      let equippedItems = p.equippedItems || [];
+      if (items[itemId] <= 0) {
+        delete items[itemId];
+        equippedItems = equippedItems.filter((id) => id !== itemId);
+      }
+      return { ...p, items, equippedItems };
+    });
+  }
+
+  // 必殺技ガチャ（2026-07-19設計）：💰ULTIMATE_GACHA_COSTで1個。所持済みは対象外（ダブりなし）。
+  function pullUltimateGacha() {
+    if ((data.player.coins ?? 0) < ULTIMATE_GACHA_COST) return null;
+    const owned = data.player.ownedUltimates || {};
+    const pool = ULTIMATES.filter((u) => !owned[u.id]);
+    if (pool.length === 0) return null; // 全部所持済み
+    const id = rollUltimateGacha(pool);
+    updatePlayer((p) => {
+      const pOwned = p.ownedUltimates || {};
+      if ((p.coins ?? 0) < ULTIMATE_GACHA_COST || pOwned[id]) return p; // 二重引き防止
+      return { ...p, coins: (p.coins ?? 0) - ULTIMATE_GACHA_COST, ownedUltimates: { ...pOwned, [id]: true } };
+    });
+    return findUltimate(id);
+  }
+
+  // 必殺技を装備（1つだけ）：所持済みのものだけ選べる
+  function equipUltimate(id) {
+    updatePlayer((p) => {
+      if (!(p.ownedUltimates || {})[id]) return p;
+      return { ...p, equippedUltimate: id };
+    });
+  }
+
   // ショップ：武器/防具を装備（未所持は不可。同じものをもう一度押すと外す）
   function equipGear(type, gearId) {
     updatePlayer((p) => {
@@ -1104,8 +1222,12 @@ export default function App() {
       baitUsedRef.current = null;
       tryRecruit(battleMonster);
     }
-    // ※クリスタルは「サイクルクリア（1単元）＝1個」だけに一本化したため、
-    //   モンスター撃破ではクリスタルを付与しない（バトルはコイン・図鑑・XP記録の報酬）。
+    // ※クリスタルは基本「サイクルクリア（1単元）＝1個」だけに一本化しているが、
+    //   小単元ボス(unitSmallBoss・2026-07-19設計)だけは例外——初回撃破でクリスタル+1
+    //   （そのクリスタルを単元別スキルの確定強化に使う）。
+    if (battleMonster.kind === "unitSmallBoss" && !alreadyCleared) {
+      updatePlayer((p) => ({ ...p, crystals: (p.crystals ?? 0) + 1 }));
+    }
   }
 
   // バトル勝利時のボーナス（ついてる等のスキル効果＝コインのみ）。
@@ -1359,6 +1481,35 @@ export default function App() {
     } else {
       setBattleMonster(null); setBattlePractice(null); // その単元に対応する敵がいない場合のみ相手選択へ
     }
+    setScreen("battle");
+  }
+
+  // 「章のまとめにチャレンジ！」：その章のボスの梯子で、まだ倒していない最初の段に挑む
+  //  （全部倒していれば最後の段＝第6段をもう一度挑戦できる）。
+  function challengeChapterBoss(chapterId) {
+    const clearedIds = new Set(
+      (data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win").map((r) => r.extra.monsterId)
+    );
+    const ladder = MONSTERS.filter((m) => m.kind === "unitBoss" && m.chapterId === chapterId).sort((a, b) => a.tier - b.tier);
+    if (!ladder.length) return;
+    const next = ladder.find((m) => !clearedIds.has(m.id)) || ladder[ladder.length - 1];
+    battleGeneralDiffRef.current = initDifficulty("standard");
+    battleMistakeSourceRef.current = null;
+    setBattleMonster(next);
+    setBattlePractice(null);
+    setBattleKey((k) => k + 1);
+    setScreen("battle");
+  }
+
+  // 「小単元ボスに挑戦」：その小単元専用の強敵と戦う（初回撃破でクリスタル獲得）
+  function challengeUnitBoss(unit) {
+    const monster = unit && MONSTERS.find((m) => m.kind === "unitSmallBoss" && m.unitId === unit.id);
+    if (!monster) return;
+    battleGeneralDiffRef.current = initDifficulty("standard");
+    battleMistakeSourceRef.current = null;
+    setBattleMonster(monster);
+    setBattlePractice(null);
+    setBattleKey((k) => k + 1);
     setScreen("battle");
   }
 
@@ -1753,6 +1904,26 @@ export default function App() {
     return <Skill player={data.player} onEquip={setEquip} onPullSkill={pullSkillGacha} onBack={() => setScreen("home")} />;
   }
 
+  // 単元別スキル ロードアウト（2026-07-18設計）：所持スキルから最大2つ装備する
+  if (screen === "loadout") {
+    return <Loadout player={data.player} onToggle={toggleEquippedChapterSkill} onLevelUp={levelUpChapterSkill} onBack={() => setScreen("home")} />;
+  }
+
+  // アイテム（2026-07-19復活・ガチャ方式）：ストック最大10・バトル持ち込み最大2
+  if (screen === "items") {
+    return <Items player={data.player} onPull={pullItemGacha} onToggle={toggleEquippedItem} onBack={() => setScreen("home")} />;
+  }
+
+  // 必殺技一覧（2026-07-19設計）：💰ガチャで集めて1つを装備する
+  if (screen === "ultimates") {
+    return <Ultimates player={data.player} onPull={pullUltimateGacha} onEquip={equipUltimate} onBack={() => setScreen("home")} />;
+  }
+
+  // 自分のステータス（HP・各単元のBPメーター）
+  if (screen === "statusMeter") {
+    return <StatusMeter player={data.player} onBack={() => setScreen("home")} />;
+  }
+
   // ステータス詳細（単元・小単元ごとの理解度・正答率・AIの一言）
   if (screen === "status") {
     return <StatusDetail player={data.player} records={data.records} onBack={() => setScreen("home")} />;
@@ -1867,6 +2038,8 @@ export default function App() {
           clearedIds={clearedIds}
           onSelect={(m) => { battleGeneralDiffRef.current = initDifficulty("standard"); battleMistakeSourceRef.current = null; setBattleMonster(m); setBattlePractice(null); setBattleKey((k) => k + 1); }}
           onSeen={markMonstersSeen}
+          onClaimSkill={claimChapterSkillGacha}
+          onOpenLoadout={() => setScreen("loadout")}
           onBack={() => setScreen("home")}
         />
       );
@@ -1874,6 +2047,13 @@ export default function App() {
     // 正の数・負の数(c1)のモンスターは「行動選択型バトル(v2)」で試作。他は従来バトル。
     const maxHearts = Math.min(13, 5 + new Set((data.records || []).filter((r) => r.mode === "battle" && r.extra?.result === "win" && /^boss_/.test(r.extra?.monsterId || "")).map((r) => r.extra.monsterId)).size);
     const useTurnBattle = battleMonster && (battleMonster.grade ?? 1) === 1; // 中1は全章 行動選択型バトルへ
+    // その章の最大BP上限（現在はBASE_BP_CAP=BP_MAXのため常に350。段階解放を再有効化する時のために残置）
+    const battleChapterCap = (() => {
+      if (!useTurnBattle || !battleMonster?.chapterId) return undefined;
+      const ch = findChapterById(battleMonster.chapterId);
+      const clearedN = ch ? ch.units.filter((u) => isCalcKingCleared(data.player, u.id)).length : 0;
+      return chapterBPCap(clearedN);
+    })();
     if (useTurnBattle) {
       return (
         <TurnBattle
@@ -1881,6 +2061,9 @@ export default function App() {
           player={data.player}
           monster={battleMonster}
           maxHearts={maxHearts}
+          chapterCap={battleChapterCap}
+          onUseItem={useBattleItem}
+          onBPChange={(chapterId, bp) => updatePlayer((p) => ({ ...p, chapterBP: { ...(p.chapterBP || {}), [chapterId]: bp } }))}
           problemSource={battlePractice ? battleProblemSource(battlePractice) : generalBattleProblemSource(battleMonster)}
           onAttempt={battlePractice ? recordBattlePracticeAttempt : recordBattleGeneralAttempt}
           onResult={handleBattleResult}
@@ -1986,10 +2169,15 @@ export default function App() {
         }
       }}
       onBattle={() => setScreen("battle")}
+      onBossChallenge={challengeChapterBoss}
+      onStatusMeter={() => setScreen("statusMeter")}
+      onUnitBoss={challengeUnitBoss}
       onRelearn={(unit) => { setRelearnFocus(unit?.id || null); setScreen("relearn"); }}
       onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}
       onDialogue={() => setScreen("dialogue")}
-      onTeacherMode={() => { setTeacherFocus(null); setScreen("teacherMode"); }}
+      onLoadout={() => setScreen("loadout")}
+      onItems={() => setScreen("items")}
+      onUltimates={() => setScreen("ultimates")}
       onFeedback={() => setScreen("feedback")}
       onHaichi={() => setScreen("haichi")}
       onUnitHaichi={(unit) => openHaichiStudio(unit, "home")}

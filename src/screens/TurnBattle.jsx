@@ -1,10 +1,13 @@
 // ============================================================
-// TurnBattle.jsx — 行動選択型バトル（v2・正負c1で試作）
+// TurnBattle.jsx — 行動選択型バトル（v2・中1全章）
 //  1ターン: ①行動を選ぶ(攻撃/必殺技/スキル/防御) → ②問題(制限時間) →
 //           ③敵ターン(毎ターン動く)。正解しないと自分の行動は失敗。
-//  設計: Obsidian「設計_バトル刷新_行動選択型_2026-07-05」
+//  設計: Obsidian「設計_バトル刷新_行動選択型_2026-07-05」／
+//        「設計_単元別戦闘力とHP1000化_2026-07-18」
 //  既存 Battle.jsx とprops契約(onResult/onMistake/onHpChange/onExit…)を揃え、
-//  App側は正負(c1)モンスターのときだけ本コンポーネントへ差し替える。
+//  App側は中1モンスターのときだけ本コンポーネントへ差し替える。
+//  中1の単元(unit/sample)・ボスの梯子(unitBoss)は「単元別戦闘力」＝BP制
+//  （HP1000共通・ダメージ=自分BP÷相手BP×100）で戦う。章ボス等は従来のLv制のまま。
 // ============================================================
 import { useState, useEffect, useRef, useMemo } from "react";
 import MonsterSprite from "../components/MonsterSprite.jsx";
@@ -18,10 +21,15 @@ import * as bgm from "../audio/bgm.js";
 import * as sfx from "../audio/sfx.js";
 import { isCorrect, playerLevel } from "../engine/scoring.js";
 import {
-  patternForMonster, turnEnemyDecide, TURN_ENEMY_PATTERNS, TURN_SKILLS, findTurnSkill,
-  baseAttackDamage, nextTurnProblem, TURN_SP_MAX, ULT_COST, ULT_MULT,
+  patternForMonster, turnEnemyDecide, pickBossPattern, TURN_ENEMY_PATTERNS,
+  baseAttackDamage, nextTurnProblem, TURN_SP_MAX, ULT_COST,
   isTwoPhaseBoss, BOSS_PHASE2_PATTERN, JUST_GUARD_COUNTER_MULT,
+  isCompanionBattle, bpDamage, adjustBP, COMPANION_HP, BP_MIN, BP_MAX,
+  timejamCanAct, paralysisFails,
 } from "../engine/battleTurn.js";
+import { chapterSkillTier } from "../data/chapterSkills.js";
+import { findItem, itemSummary } from "../data/items.js";
+import { findUltimate, ultimateMult } from "../data/ultimates.js";
 
 // 敵の通常攻撃・連続攻撃の各発は20%の確率でかわせる（ため攻撃・必殺技は対象外＝必ず当たる）
 const DODGE_CHANCE = 0.2;
@@ -42,29 +50,60 @@ function questionTime(q) {
   return Math.min(99, t);
 }
 
+// スキルの効果を短い一言に（ロードアウト画面と同じ考え方）
+function skillSummary(s) {
+  if (!s) return "";
+  const parts = [];
+  if (s.turns != null) parts.push(`${s.turns}T`);
+  if (s.mult != null) parts.push(`与ダメ+${Math.round((s.mult - 1) * 100)}%`);
+  if (s.reduce != null) parts.push(`被ダメ−${Math.round(s.reduce * 100)}%`);
+  return parts.join(" ");
+}
+
 export default function TurnBattle({
   player, monster, onResult, onSpChange, onHpChange, onMistake, onExit, onDex = null,
-  problemSource = null, onAttempt = null, maxHearts = 5,
+  problemSource = null, onAttempt = null, maxHearts = 5, onBPChange = null, chapterCap = BP_MAX,
+  onUseItem = null,
 }) {
   const lv = playerLevel(player);
-  const maxHp = maxHearts;
-  const patternRef = useRef(patternForMonster(monster)); // ボスは変身で書き換わる
+  // ── 単元別「戦闘力」＝BP制（中1全章：ザコ/れんしゅう/ボスの梯子） ──
+  const isCompanion = isCompanionBattle(monster);
+  const myBP = player.chapterBP?.[monster.chapterId] || BP_MIN;
+  const enemyBP = monster.bp || BP_MIN;
+  const maxHp = isCompanion ? COMPANION_HP : maxHearts;
+  const monMaxHp = isCompanion ? COMPANION_HP : monster.hp;
+  const patternRef = useRef(patternForMonster(monster)); // ボスは変身/技プールで書き換わる
   const [patKey, setPatKey] = useState(0);               // パターン表示の再描画用
   const patInfo = TURN_ENEMY_PATTERNS[patternRef.current] || TURN_ENEMY_PATTERNS.attack;
-  const baseDmg = useRef(baseAttackDamage(monster)).current;
+  const baseDmg = useRef(isCompanion ? bpDamage(myBP, enemyBP) : baseAttackDamage(monster)).current;
   const bossPhaseRef = useRef(1);                          // 章ボスの段階(1→2)
   const dexMovesRef = useRef({});                          // この戦闘で見た敵の技（図鑑記録用）
+
+  // ── 装備中スキル（ロードアウト最大2つ。まひふうじだけは常時パッシブ扱い） ──
+  const equippedDefs = (player.equippedSkills || [])
+    .map((cid) => chapterSkillTier(cid, player.ownedChapterSkills?.[cid] || "D"))
+    .filter(Boolean);
+  const castableSkills = equippedDefs.filter((s) => s.kind !== "paralysisResist");
+  const paralysisReduce = equippedDefs.find((s) => s.kind === "paralysisResist")?.reduce || 0;
+
+  // ── 装備中アイテム（2026-07-19復活。バトル持ち込み最大2種類・ストックは player.items が正） ──
+  const itemStock = player.items || {};
+  const equippedItemDefs = (player.equippedItems || []).map((id) => findItem(id)).filter(Boolean);
+  // ── 装備中の必殺技（2026-07-19設計：ガチャで集める。1発の倍率は最大5倍にクランプ） ──
+  const ultimateDef = findUltimate(player.equippedUltimate);
+  const ultMult = ultimateMult(ultimateDef);
 
   // ── 表示state ──
   const [phase, setPhase] = useState("intro"); // intro | command | question | sleep | win | lose
   const [playerHp, setPlayerHp] = useState(maxHp);
-  const [monsterHp, setMonsterHp] = useState(monster.hp);
+  const [monsterHp, setMonsterHp] = useState(monMaxHp);
   const [sp, setSp] = useState(() => Math.min(TURN_SP_MAX, player.sp ?? 0));
   const [q, setQ] = useState(null);
   const [timer, setTimer] = useState(BASE_TIME);
   const [input, setInput] = useState("");
   const [showPad, setShowPad] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showItems, setShowItems] = useState(false);
   const [pending, setPending] = useState(null);   // 選択中の行動（表示用）
   const [log, setLog] = useState(`${monster.name}（${patInfo.icon}${patInfo.name}）があらわれた！`);
   const [monState, setMonState] = useState("idle");
@@ -87,7 +126,7 @@ export default function TurnBattle({
 
   // ── 権威ref（setTimeout/非同期でも正しい値を参照）──
   const hpRef = useRef(maxHp);
-  const monHpRef = useRef(monster.hp);
+  const monHpRef = useRef(monMaxHp);
   const spRef = useRef(sp);
   const phaseRef = useRef("intro");
   const lockedRef = useRef(false);
@@ -96,14 +135,21 @@ export default function TurnBattle({
   const pendingRef = useRef(null);
   const timerRef = useRef(BASE_TIME);
   const tallyRef = useRef({ correct: 0, wrong: 0 });
+  const bpDeltaRef = useRef(0);          // このバトル中の正解-不正解の差分（companion戦のBP増減用）
   const inputRef = useRef(null);
   // プレイヤーの状態異常・バフ
   const sleepRef = useRef(0);            // 睡眠 残ターン
   const poisonRef = useRef(0);           // 毒 残ターン
-  const reduceRef = useRef(null);        // { turns, amt } 被ダメ軽減
-  const nullifyRef = useRef(false);      // 次の1回だけ無効
   const immSleepRef = useRef(0);         // 眠り無効 残ターン
   const immPoisonRef = useRef(0);        // 毒無効 残ターン
+  const timejamRef = useRef(0);          // 時間妨害 残ターン
+  const timejamTurnRef = useRef(0);      // 時間妨害中の経過ターン数（2ターンに1回だけ動ける判定用）
+  const immTimejamRef = useRef(0);       // 時間妨害無効 残ターン
+  const paralysisRef = useRef(0);        // 麻痺 残ターン
+  const dmgBuffRef = useRef(null);       // { turns, mult } 与ダメバフ（ちからをこめる／闘志の実）
+  const burstGuardRef = useRef(null);    // { turns, reduce } ため技・必殺技の被ダメ軽減（みやぶり）
+  const multiGuardRef = useRef(null);    // { turns, reduce } 連続攻撃の被ダメ軽減（みきりのかまえ）
+  const itemGuardRef = useRef(null);     // { turns, reduce } アイテム「守りのお守り」＝あらゆる被ダメを軽減
   const guardActiveRef = useRef(false);  // このターン「防御」を選び成功した
   const enemyGuardRef = useRef(0);       // 敵が身を守っている（こちらの攻撃を無効）残回数
 
@@ -143,10 +189,15 @@ export default function TurnBattle({
     const t = [];
     if (sleepRef.current > 0) t.push({ icon: "😴", color: "#818cf8", label: `ねむり${sleepRef.current}` });
     if (poisonRef.current > 0) t.push({ icon: "☠️", color: "#a3e635", label: `どく${poisonRef.current}` });
-    if (reduceRef.current) t.push({ icon: "🛡️", color: "#60a5fa", label: `軽減${reduceRef.current.turns}` });
-    if (nullifyRef.current) t.push({ icon: "🔰", color: "#93c5fd", label: "無効" });
+    if (timejamRef.current > 0) t.push({ icon: "⏳", color: "#a78bfa", label: `時間妨害${timejamRef.current}` });
+    if (paralysisRef.current > 0) t.push({ icon: "⚡", color: "#facc15", label: `まひ${paralysisRef.current}` });
+    if (dmgBuffRef.current) t.push({ icon: "💪", color: "#fca5a5", label: `攻撃力UP${dmgBuffRef.current.turns}` });
+    if (burstGuardRef.current) t.push({ icon: "👁️", color: "#60a5fa", label: `みやぶり${burstGuardRef.current.turns}` });
+    if (multiGuardRef.current) t.push({ icon: "🥋", color: "#34d399", label: `みきり${multiGuardRef.current.turns}` });
+    if (itemGuardRef.current) t.push({ icon: "🛡️", color: "#93c5fd", label: `お守り${itemGuardRef.current.turns}` });
     if (immSleepRef.current > 0) t.push({ icon: "⏰", color: "#38bdf8", label: `眠無${immSleepRef.current}` });
     if (immPoisonRef.current > 0) t.push({ icon: "🧪", color: "#a3e635", label: `毒無${immPoisonRef.current}` });
+    if (immTimejamRef.current > 0) t.push({ icon: "🛡️", color: "#c4b5fd", label: `時間妨害無${immTimejamRef.current}` });
     setStatusTags(t);
   }
 
@@ -154,13 +205,24 @@ export default function TurnBattle({
 
   // ============ ターンの流れ ============
 
-  // ターン開始：睡眠中なら自動で1ターン経過、そうでなければ行動選択へ
+  // ターン開始：睡眠/時間妨害/麻痺で動けないときは自動で1ターン経過、そうでなければ行動選択へ
   function startTurn() {
     if (endedRef.current) return;
     setPending(null); pendingRef.current = null;
     setShowSkills(false);
     guardActiveRef.current = false;
     if (sleepRef.current > 0) { doSleepTurn(); return; }
+    if (timejamRef.current > 0) {
+      timejamTurnRef.current += 1;
+      const canAct = timejamCanAct(timejamTurnRef.current);
+      timejamRef.current = Math.max(0, timejamRef.current - 1);
+      refreshTags();
+      if (!canAct) { doForcedSkipTurn("⏳ 時間がゆがんでいて うごけない…！"); return; }
+    } else if (paralysisRef.current > 0) {
+      paralysisRef.current = Math.max(0, paralysisRef.current - 1);
+      refreshTags();
+      if (paralysisFails(paralysisReduce)) { doForcedSkipTurn("⚡ まひで うごけない…！"); return; }
+    }
     phaseRef.current = "command"; setPhase("command");
   }
 
@@ -173,22 +235,34 @@ export default function TurnBattle({
     setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 900);
   }
 
+  // 時間妨害・麻痺で不発のターン：睡眠と同じ「動けない」表示を使い回す
+  function doForcedSkipTurn(msg) {
+    phaseRef.current = "sleep"; setPhase("sleep");
+    setLog(msg);
+    setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 900);
+  }
+
   // 行動を選ぶ → 問題へ
-  function chooseAction(type, skill = null) {
+  function chooseAction(type, extra = null) {
     if (phaseRef.current !== "command" || endedRef.current) return;
     if (type === "ultimate" && spRef.current < ULT_COST) { setLog(`必殺技には SP${ULT_COST} 必要！（今 ${spRef.current}）`); return; }
     if (type === "skill") {
-      if (!skill) { setShowSkills((v) => !v); return; }
-      if (spRef.current < skill.cost) { setLog(`${skill.name}には SP${skill.cost} 必要！（今 ${spRef.current}）`); return; }
+      if (!extra) { setShowSkills((v) => !v); setShowItems(false); return; }
+      if (spRef.current < extra.cost) { setLog(`${extra.name}には SP${extra.cost} 必要！（今 ${spRef.current}）`); return; }
+    }
+    if (type === "item") {
+      if (!extra) { setShowItems((v) => !v); setShowSkills(false); return; }
+      if ((itemStock[extra.id] || 0) <= 0) { setLog(`${extra.name}のストックが無い！`); return; }
     }
     const label =
       type === "attack" ? "⚔️ こうげき" :
-      type === "ultimate" ? "💥 必殺技" :
+      type === "ultimate" ? `${ultimateDef.icon} ${ultimateDef.name}` :
       type === "guard" ? "🛡️ ぼうぎょ" :
-      `${skill.icon} ${skill.name}`;
-    pendingRef.current = { type, skill };
-    setPending({ type, skill, label });
+      `${extra.icon} ${extra.name}`;
+    pendingRef.current = { type, skill: type === "skill" ? extra : null, item: type === "item" ? extra : null };
+    setPending({ type, label });
     setShowSkills(false);
+    setShowItems(false);
     beginQuestion();
   }
 
@@ -206,6 +280,7 @@ export default function TurnBattle({
     lockedRef.current = true;
     sfx.wrong();
     tallyRef.current.wrong++;
+    if (isCompanion) bpDeltaRef.current -= 1;
     if (q) { onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level }); onAttempt?.({ skill: q.skill, unitId: q.unitId, level: q.level, ok: false, q: q.q, ans: q.ans, templateId: q.id, seed: q.seed ?? null, userAnswer: "" }); }
     setShakeAns(true); setTimeout(() => setShakeAns(false), 460);
     setLog(`⏰ 時間切れ！ ${pending?.label || "行動"}は失敗… (正解 ${q?.ans})`);
@@ -220,6 +295,7 @@ export default function TurnBattle({
     if (ok) {
       sfx.correct();
       tallyRef.current.correct++;
+      if (isCompanion) bpDeltaRef.current += 1;
       changeSp(spRef.current + 1); // 正解でSP+1
       setShowRing(true); setTimeout(() => setShowRing(false), 700);
       setHeroAtk(true); setTimeout(() => setHeroAtk(false), 340);
@@ -227,6 +303,7 @@ export default function TurnBattle({
     } else {
       sfx.wrong();
       tallyRef.current.wrong++;
+      if (isCompanion) bpDeltaRef.current -= 1;
       onMistake?.({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level });
       setShakeAns(true); setTimeout(() => setShakeAns(false), 460);
       setLog(`不正解… ${pending?.label || "行動"}は失敗した（正解 ${q.ans}）`);
@@ -248,10 +325,16 @@ export default function TurnBattle({
       setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 800);
       return;
     }
+    if (p.type === "item") {
+      applyItem(p.item);
+      setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 800);
+      return;
+    }
     // 攻撃 / 必殺技
     const isUlt = p.type === "ultimate";
     if (isUlt) changeSp(spRef.current - ULT_COST);
-    let dmg = isUlt ? baseDmg * ULT_MULT : baseDmg;
+    let dmg = isUlt ? baseDmg * ultMult : baseDmg;
+    if (dmgBuffRef.current) dmg = Math.round(dmg * dmgBuffRef.current.mult);
     // 敵が「まもり」中なら攻撃を無効化（1回消費）
     if (enemyGuardRef.current > 0) {
       enemyGuardRef.current -= 1;
@@ -261,12 +344,21 @@ export default function TurnBattle({
       setTimeout(() => { if (!endedRef.current) enemyPhase(); }, 800);
       return;
     }
-    if (isUlt) { sfx.skill({ ult: true }); setSkillFx({ name: "必殺技", icon: "💥", color: "#f472b6", big: true }); setTimeout(() => setSkillFx(null), 1400); }
+    if (isUlt) { sfx.skill({ ult: true }); setSkillFx({ name: ultimateDef.name, icon: ultimateDef.icon, color: ultimateDef.color || "#f472b6", big: true }); setTimeout(() => setSkillFx(null), 1400); }
     setMonState("damage"); setAnimKey((k) => k + 1);
     setMonDmg(`-${dmg}`); setDmgKey((k) => k + 1);
-    setLog(isUlt ? `💥 必殺技さくれつ！ ${dmg}ダメージ！` : `⚔️ こうげき！ ${dmg}ダメージ！`);
+    setLog(isUlt ? `${ultimateDef.icon} ${ultimateDef.name}さくれつ！ ${dmg}ダメージ！` : `⚔️ こうげき！ ${dmg}ダメージ！`);
     const nv = Math.max(0, monHpRef.current - dmg);
     monHpRef.current = nv; setMonsterHp(nv);
+    // ドレイン系必殺技：与えたダメージの一部を吸収して自分のHPを回復
+    if (isUlt && ultimateDef.lifesteal) {
+      const healAmt = Math.round(dmg * ultimateDef.lifesteal);
+      if (healAmt > 0) {
+        const nvHp = Math.min(maxHp, hpRef.current + healAmt);
+        hpRef.current = nvHp; setPlayerHp(nvHp);
+        setLog((l) => l + ` 🩸吸収+${healAmt}`);
+      }
+    }
     if (nv <= 0) { setTimeout(triggerWin, 700); return; }
     checkBossPhase(nv);
     setTimeout(() => { setMonState("idle"); if (!endedRef.current) enemyPhase(); }, 800);
@@ -276,26 +368,57 @@ export default function TurnBattle({
     const s = skill || {};
     changeSp(spRef.current - (s.cost || 0));
     sfx.skill();
-    setSkillFx({ name: s.name, icon: s.icon, color: s.color });
+    setSkillFx({ name: s.name, icon: s.icon, color: s.color || "#fff" });
     setTimeout(() => setSkillFx(null), 1400);
-    if (s.kind === "heal") {
-      const nv = Math.min(maxHp, hpRef.current + (s.value || 3));
-      const healed = nv - hpRef.current;
-      hpRef.current = nv; setPlayerHp(nv);
-      setLog(`💚 かいふく！ ハートが ${healed} 回復した！`);
-    } else if (s.kind === "reduce") {
-      reduceRef.current = { turns: s.turns || 2, amt: s.amt || 1 };
-      setLog(`🛡️ ${s.turns}ターン 受けるダメージを ${s.amt} へらす！`);
-    } else if (s.kind === "nullifyOnce") {
-      nullifyRef.current = true;
-      setLog("🔰 バリア！ 次の1回のダメージを無効にする！");
+    if (s.kind === "dmgup") {
+      dmgBuffRef.current = { turns: s.turns || 2, mult: s.mult || 1.15 };
+      setLog(`💪 ${s.turns}ターン 与ダメが${Math.round(((s.mult || 1.15) - 1) * 100)}%アップ！`);
+    } else if (s.kind === "burstGuard") {
+      burstGuardRef.current = { turns: s.turns || 1, reduce: s.reduce || 0.5 };
+      setLog(`👁️ ${s.turns}ターン ため技・必殺技の被ダメを${Math.round((s.reduce || 0.5) * 100)}%へらす！`);
+    } else if (s.kind === "multiGuard") {
+      multiGuardRef.current = { turns: s.turns || 1, reduce: s.reduce || 0.5 };
+      setLog(`🥋 ${s.turns}ターン 連続攻撃の被ダメを${Math.round((s.reduce || 0.5) * 100)}%へらす！`);
     } else if (s.kind === "immSleep") {
-      immSleepRef.current = s.turns || 5;
+      immSleepRef.current = s.turns || 3;
       setLog(`⏰ ${s.turns}ターン ねむらなくなった！`);
     } else if (s.kind === "immPoison") {
       poisonRef.current = 0;
-      immPoisonRef.current = s.turns || 5;
+      immPoisonRef.current = s.turns || 3;
       setLog(`🧪 どくを消した！ ${s.turns}ターン 毒にならない！`);
+    } else if (s.kind === "immTimejam") {
+      immTimejamRef.current = s.turns || 2;
+      setLog(`🛡️ ${s.turns}ターン 時間妨害にかからない！`);
+    }
+    refreshTags();
+  }
+
+  // アイテムを使う（2026-07-19復活）：ストックは親(App.jsx)側で1個消費、効果はこのバトル内ですぐ適用
+  function applyItem(item) {
+    const it = item || {};
+    onUseItem?.(it.id);
+    sfx.skill();
+    setSkillFx({ name: it.name, icon: it.icon, color: it.color || "#fff" });
+    setTimeout(() => setSkillFx(null), 1400);
+    if (it.kind === "heal") {
+      const nv = Math.min(maxHp, hpRef.current + it.power);
+      hpRef.current = nv; setPlayerHp(nv);
+      setLog(`${it.icon} ${it.name}！ HPが${it.power}回復した！`);
+    } else if (it.kind === "sp") {
+      changeSp(spRef.current + it.power);
+      setLog(`${it.icon} ${it.name}！ SPが${it.power}回復した！`);
+    } else if (it.kind === "curePoison") {
+      poisonRef.current = 0;
+      setLog(`${it.icon} ${it.name}！ どくが治った！`);
+    } else if (it.kind === "cureStatus") {
+      sleepRef.current = 0; poisonRef.current = 0; timejamRef.current = 0; paralysisRef.current = 0;
+      setLog(`${it.icon} ${it.name}！ すべての状態異常が治った！`);
+    } else if (it.kind === "atkUp") {
+      dmgBuffRef.current = { turns: it.turns || 3, mult: it.mult || 1.5 };
+      setLog(`${it.icon} ${it.name}！ ${it.turns}ターン 与ダメが${Math.round(((it.mult || 1.5) - 1) * 100)}%アップ！`);
+    } else if (it.kind === "dmgReduce") {
+      itemGuardRef.current = { turns: it.turns || 3, reduce: it.reduce || 0.4 };
+      setLog(`${it.icon} ${it.name}！ ${it.turns}ターン 受けるダメージが${Math.round((it.reduce || 0.4) * 100)}%減る！`);
     }
     refreshTags();
   }
@@ -303,6 +426,12 @@ export default function TurnBattle({
   // ============ 敵ターン ============
   function enemyPhase() {
     if (endedRef.current) return;
+    // ボスの梯子(patternPool持ち)はターンごとに使う技をランダムに選ぶ
+    if (monster.patternPool) {
+      const picked = pickBossPattern(monster, aiStateRef.current);
+      patternRef.current = picked.pattern;
+      aiStateRef.current = picked.state;
+    }
     const { st, act } = turnEnemyDecide(patternRef.current, aiStateRef.current);
     aiStateRef.current = st;
     // 敵図鑑：実際に出した技を記録（負けても残る＝観察メモ）
@@ -351,6 +480,25 @@ export default function TurnBattle({
       afterEnemy();
       return;
     }
+    if (act.kind === "timejam") {
+      if (immTimejamRef.current > 0) {
+        showEnemyFx({ icon: "🛡️", label: "時間妨害 無効！", color: "#60a5fa" });
+        setLog(`${monster.name} は時間を歪めようとした！ でも「じかんのよろい」で防いだ！`);
+      } else {
+        timejamRef.current = act.turns; timejamTurnRef.current = 0; refreshTags();
+        showEnemyFx({ icon: "⏳", label: "時間が歪んだ！", color: "#a78bfa" });
+        setLog(`${monster.name} の時間妨害！ ${act.turns}ターン 思うように動けなくなった…`);
+      }
+      afterEnemy();
+      return;
+    }
+    if (act.kind === "paralysis") {
+      paralysisRef.current = act.turns; refreshTags();
+      showEnemyFx({ icon: "⚡", label: "まひした！", color: "#facc15" });
+      setLog(`${monster.name} のまひ攻撃！ ${act.turns}ターン 体がしびれる…`);
+      afterEnemy();
+      return;
+    }
     if (act.kind === "multi") {
       const justGuard = guardActiveRef.current; // ためた大技を防御で受けた＝ジャスト防御
       const hits = act.hits || 3;
@@ -358,7 +506,7 @@ export default function TurnBattle({
       let i = 0;
       const doHit = () => {
         if (endedRef.current) return;
-        enemyDamage(act.per || 1, `${monster.name} の連続こうげき（${i + 1}/${hits}）`);
+        enemyDamage(act.per || 1, `${monster.name} の連続こうげき（${i + 1}/${hits}）`, { kind: "multi" });
         i++;
         if (i < hits && !endedRef.current) setTimeout(doHit, 340);
         else { if (justGuard) justGuardCounter(); afterEnemy(); }
@@ -372,7 +520,7 @@ export default function TurnBattle({
     const justGuard = isBurst && guardActiveRef.current; // ためた一撃を防御で受けた＝ジャスト防御
     const label = isBurst ? `${monster.name} の ためた一撃！` : `${monster.name} のこうげき！`;
     if (isBurst) showEnemyFx({ icon: "💥", label: "ためた一撃！", color: "#f87171" });
-    enemyDamage(dmg, label, { guaranteed: isBurst }); // ため攻撃は必ず命中
+    enemyDamage(dmg, label, { guaranteed: isBurst, kind: isBurst ? "burst" : "attack" }); // ため攻撃は必ず命中
     if (justGuard) justGuardCounter();
     afterEnemy();
   }
@@ -410,9 +558,10 @@ export default function TurnBattle({
     setLog(`⚠️ ${monster.name} は変身した！ 手数で押してくる…！`);
   }
 
-  // 敵の1撃をプレイヤーへ（バリア→防御半減→軽減の順で処理）
+  // 敵の1撃をプレイヤーへ（みやぶり/みきり軽減→防御半減の順で処理）
   //  opts.guaranteed=true（ため攻撃/burst）は必ず命中。それ以外（通常こうげき・連続こうげきの各発）は
   //  DODGE_CHANCEの確率でかわせる＝毎回100%食らうわけではない、という緊張と息抜きを作る。
+  //  opts.kind: "attack" | "burst" | "multi"（みやぶり・みきりのかまえの対象判定に使う）
   function enemyDamage(raw, label, opts = {}) {
     if (endedRef.current) return;
     if (!opts.guaranteed && Math.random() < DODGE_CHANCE) {
@@ -422,16 +571,14 @@ export default function TurnBattle({
       sfx.tap();
       return;
     }
-    let dmg = raw;
+    // BP制（中1・単元別戦闘力）：ダメージ = 相手BP÷自分BP×100 を基準ダメージとし、
+    //  ため技/連続攻撃は旧スケールの倍率(raw)をそのままかけて大技らしさを出す。
+    let dmg = isCompanion ? bpDamage(enemyBP, myBP) * (raw || 1) : raw;
     let note = "";
-    if (nullifyRef.current && dmg > 0) {
-      nullifyRef.current = false; refreshTags();
-      dmg = 0; note = "（🔰無効！）";
-    } else {
-      if (guardActiveRef.current) dmg = Math.floor(dmg / 2);
-      if (reduceRef.current) dmg = Math.max(0, dmg - reduceRef.current.amt);
-      if (guardActiveRef.current) note = "（🛡️半減）";
-    }
+    if (opts.kind === "burst" && burstGuardRef.current) { dmg = Math.round(dmg * (1 - burstGuardRef.current.reduce)); note += "（👁️みやぶり軽減）"; }
+    if (opts.kind === "multi" && multiGuardRef.current) { dmg = Math.round(dmg * (1 - multiGuardRef.current.reduce)); note += "（🥋みきり軽減）"; }
+    if (itemGuardRef.current) { dmg = Math.round(dmg * (1 - itemGuardRef.current.reduce)); note += "（🛡️お守り軽減）"; }
+    if (guardActiveRef.current) { dmg = Math.floor(dmg / 2); note += "（🛡️半減）"; }
     setMonState("attack"); setAnimKey((k) => k + 1);
     setShakeAns(true); setTimeout(() => setShakeAns(false), 400);
     if (dmg > 0) { setHurt(true); setTimeout(() => setHurt(false), 500); }
@@ -445,21 +592,33 @@ export default function TurnBattle({
   function afterEnemy() {
     setTimeout(() => {
       if (endedRef.current) return;
-      // 毒：ターン末に1ダメージ＋残ターン減
+      // 毒：ターン末に1ポイントぶんダメージ＋残ターン減
       if (poisonRef.current > 0) {
-        const nv = Math.max(0, hpRef.current - 1);
+        const poisonDmg = isCompanion ? bpDamage(enemyBP, myBP) : 1;
+        const nv = Math.max(0, hpRef.current - poisonDmg);
         hpRef.current = nv; setPlayerHp(nv);
         poisonRef.current -= 1;
-        setLog((l) => l + " ☠️毒 -1");
+        setLog((l) => l + ` ☠️毒 -${poisonDmg}`);
         if (nv <= 0) { setTimeout(triggerLose, 400); return; }
       }
-      // バフの残ターン減衰
-      if (reduceRef.current) { reduceRef.current.turns -= 1; if (reduceRef.current.turns <= 0) reduceRef.current = null; }
+      // バフ・軽減の残ターン減衰
+      if (dmgBuffRef.current) { dmgBuffRef.current.turns -= 1; if (dmgBuffRef.current.turns <= 0) dmgBuffRef.current = null; }
+      if (burstGuardRef.current) { burstGuardRef.current.turns -= 1; if (burstGuardRef.current.turns <= 0) burstGuardRef.current = null; }
+      if (multiGuardRef.current) { multiGuardRef.current.turns -= 1; if (multiGuardRef.current.turns <= 0) multiGuardRef.current = null; }
+      if (itemGuardRef.current) { itemGuardRef.current.turns -= 1; if (itemGuardRef.current.turns <= 0) itemGuardRef.current = null; }
       if (immSleepRef.current > 0) immSleepRef.current -= 1;
       if (immPoisonRef.current > 0) immPoisonRef.current -= 1;
+      if (immTimejamRef.current > 0) immTimejamRef.current -= 1;
       refreshTags();
       if (!endedRef.current) setTimeout(startTurn, 350);
     }, 500);
+  }
+
+  // 単元別戦闘力(BP)を保存（勝敗どちらも、正解-不正解の差分ぶんだけ増減＝負けても積み上がる）
+  function persistBP() {
+    if (!isCompanion || !onBPChange) return;
+    const nv = adjustBP(myBP, bpDeltaRef.current, chapterCap);
+    onBPChange(monster.chapterId, nv);
   }
 
   // ============ 勝敗 ============
@@ -468,6 +627,7 @@ export default function TurnBattle({
     endedRef.current = true;
     flushDex(true);
     saveHp(hpRef.current);
+    persistBP();
     phaseRef.current = "win"; setPhase("win");
     bgm.play("victory", { loop: false });
     setMonState("dead"); setAnimKey((k) => k + 1);
@@ -485,6 +645,7 @@ export default function TurnBattle({
     endedRef.current = true;
     flushDex(false);
     saveHp(1);
+    persistBP();
     phaseRef.current = "lose"; setPhase("lose");
     bgm.play("defeat", { loop: false });
     setLog("あなたはたおれてしまった…💀");
@@ -492,7 +653,7 @@ export default function TurnBattle({
   }
 
   // ============ 表示 ============
-  const monHpPct = Math.max(0, (monsterHp / monster.hp) * 100);
+  const monHpPct = Math.max(0, (monsterHp / monMaxHp) * 100);
   const timePct = (timer / (questionTime(q) || BASE_TIME)) * 100;
   const hpColor = (p) => (p > 50 ? "linear-gradient(90deg,#00cc44,#00ff88)" : p > 25 ? "linear-gradient(90deg,#cc9900,#ffcc00)" : "linear-gradient(90deg,#cc2200,#ff4400)");
 
@@ -516,8 +677,6 @@ export default function TurnBattle({
     );
   }
 
-  const skillList = TURN_SKILLS;
-
   return (
     <div className={"battle-app" + (hurt ? " bt-screen-shake" : "")}>
       <div className="encounter-flash" />
@@ -536,15 +695,16 @@ export default function TurnBattle({
         <div className="bt-panel">
           <span className="bt-enemy-name" style={{ color: monster.color }}>{monster.name}</span>
           <span className="bt-enemy-theme">【{monster.unit}】{patInfo.icon}{patInfo.name}</span>
+          {isCompanion && <span className="bt-enemy-theme">🔷 BP{enemyBP}</span>}
           {enemyIntent && <span className="bt-intent" style={{ "--ic": enemyIntent.color }}>{enemyIntent.text}</span>}
           <div className="bt-hp-row">
             <span className="bt-hp-label">HP</span>
             <div className="bt-hp-track"><div className="bt-hp-fill" style={{ width: monHpPct + "%", background: hpColor(monHpPct) }} /></div>
-            <span className="bt-hp-num">{Math.max(0, monsterHp)} / {monster.hp}</span>
+            <span className="bt-hp-num">{Math.max(0, monsterHp)} / {monMaxHp}</span>
           </div>
           {enemyGuardRef.current > 0 && <div style={{ fontSize: 11, fontWeight: 900, color: "#93c5fd", marginTop: 2 }}>🛡️ まもり中（こうげきが通らない）</div>}
           {(() => {
-            const MOVE_LABEL = { attack: "👊こうげき", burst: "💥ためた一撃", multi: "✊連続", sleep: "😴ねむらせ", guard: "🛡️まもり", poison: "☠️どく" };
+            const MOVE_LABEL = { attack: "👊こうげき", burst: "💥ためた一撃", multi: "✊連続", sleep: "😴ねむらせ", guard: "🛡️まもり", poison: "☠️どく", timejam: "⏳時間妨害", paralysis: "⚡まひ" };
             const seen = Object.keys(dexMovesRef.current).map((k) => MOVE_LABEL[k]).filter(Boolean);
             return seen.length > 0 ? (
               <div style={{ fontSize: 10.5, fontWeight: 700, color: "#a7f3d0", marginTop: 3 }}>🔍 観察メモ：{seen.join(" ・ ")}</div>
@@ -575,14 +735,33 @@ export default function TurnBattle({
         </div>
 
         {/* プレイヤーHP */}
-        <div className="bt-panel bt-player">
-          <Avatar avatar={player.avatar} size={30} />
-          <span className="bt-player-name">{player.name || "あなた"}（Lv.{lv}）</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", fontSize: 14, lineHeight: 1.15 }} title={`ハート ${Math.max(0, playerHp)}/${maxHp}`}>
-            {Array.from({ length: maxHp }).map((_, i) => (
-              <span key={i} style={{ filter: i < Math.max(0, playerHp) ? "none" : "grayscale(1)", opacity: i < Math.max(0, playerHp) ? 1 : 0.35 }}>❤️</span>
-            ))}
-          </div>
+        <div className={"bt-panel bt-player" + (isCompanion ? " bt-player-companion" : "")}>
+          {isCompanion ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Avatar avatar={player.avatar} size={30} />
+                <span className="bt-player-name">{player.name || "あなた"}</span>
+              </div>
+              <div className="bt-hp-row">
+                <span className="bt-hp-label">HP</span>
+                <div className="bt-hp-track"><div className="bt-hp-fill" style={{ width: Math.max(0, (playerHp / maxHp) * 100) + "%", background: hpColor((playerHp / maxHp) * 100) }} /></div>
+                <span className="bt-hp-num">{Math.max(0, playerHp)} / {maxHp}</span>
+              </div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "#a7f3d0" }}>
+                🔷 BP{myBP} ・ 1発 {baseDmg}ダメージ
+              </div>
+            </>
+          ) : (
+            <>
+              <Avatar avatar={player.avatar} size={30} />
+              <span className="bt-player-name">{player.name || "あなた"}（Lv.{lv}）</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", fontSize: 14, lineHeight: 1.15 }} title={`ハート ${Math.max(0, playerHp)}/${maxHp}`}>
+                {Array.from({ length: maxHp }).map((_, i) => (
+                  <span key={i} style={{ filter: i < Math.max(0, playerHp) ? "none" : "grayscale(1)", opacity: i < Math.max(0, playerHp) ? 1 : 0.35 }}>❤️</span>
+                ))}
+              </div>
+            </>
+          )}
           {statusTags.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
               {statusTags.map((t, i) => (
@@ -609,20 +788,47 @@ export default function TurnBattle({
             <div style={{ fontSize: 13, fontWeight: 900, color: "#cceebb", marginBottom: 8 }}>▶ 行動をえらぼう（正解すると成功！ 敵も動くよ）</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800 }} onClick={() => chooseAction("attack")}>⚔️ こうげき</button>
-              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: sp >= ULT_COST ? "#f472b6" : undefined, opacity: sp >= ULT_COST ? 1 : 0.5 }} onClick={() => chooseAction("ultimate")}>💥 必殺技 <span style={{ fontSize: 10 }}>({ULT_COST}SP・{ULT_MULT}倍)</span></button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: sp >= ULT_COST ? "#f472b6" : undefined, opacity: sp >= ULT_COST ? 1 : 0.5 }} onClick={() => chooseAction("ultimate")}>{ultimateDef.icon} {ultimateDef.name} <span style={{ fontSize: 10 }}>({ULT_COST}SP・{ultMult}倍)</span></button>
               <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800 }} onClick={() => chooseAction("guard")}>🛡️ ぼうぎょ <span style={{ fontSize: 10 }}>(被ダメ半分)</span></button>
-              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: showSkills ? "#38bdf8" : undefined }} onClick={() => setShowSkills((v) => !v)}>✨ スキル ▾</button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: showSkills ? "#38bdf8" : undefined }} onClick={() => chooseAction("skill")}>✨ スキル ▾</button>
+              <button className="bt-choice" style={{ padding: "13px 8px", fontWeight: 800, borderColor: showItems ? "#4ade80" : undefined, gridColumn: "1 / -1" }} onClick={() => chooseAction("item")}>🎒 アイテム ▾</button>
             </div>
             {showSkills && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-                {skillList.map((s) => {
+                {castableSkills.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11, fontWeight: 700, color: "#88aa88", textAlign: "center", padding: "6px 0" }}>
+                    スキル未装備（🎒ロードアウトで装備できるよ）
+                  </div>
+                )}
+                {castableSkills.map((s) => {
                   const ready = sp >= s.cost;
                   return (
-                    <button key={s.id} className="bt-choice" data-sfx="none" disabled={!ready}
-                      onClick={() => chooseAction("skill", s)} title={s.desc}
-                      style={{ padding: "9px 6px", fontSize: 12, fontWeight: 800, opacity: ready ? 1 : 0.45, borderColor: ready ? s.color : undefined }}>
-                      {s.icon} {s.name} <span style={{ fontSize: 10 }}>({s.cost}SP)</span>
-                      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.85, marginTop: 2 }}>{s.desc}</div>
+                    <button key={s.chapterId} className="bt-choice" data-sfx="none" disabled={!ready}
+                      onClick={() => chooseAction("skill", s)} title={s.theme}
+                      style={{ padding: "9px 6px", fontSize: 12, fontWeight: 800, opacity: ready ? 1 : 0.45 }}>
+                      {s.icon} {s.name} <span style={{ fontSize: 10 }}>({s.cost}SP・{s.rank})</span>
+                      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.85, marginTop: 2 }}>{skillSummary(s)}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {showItems && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
+                {equippedItemDefs.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11, fontWeight: 700, color: "#88aa88", textAlign: "center", padding: "6px 0" }}>
+                    アイテム未装備（🧪アイテムで持ち込みを選べるよ）
+                  </div>
+                )}
+                {equippedItemDefs.map((it) => {
+                  const count = itemStock[it.id] || 0;
+                  const ready = count > 0;
+                  return (
+                    <button key={it.id} className="bt-choice" data-sfx="none" disabled={!ready}
+                      onClick={() => chooseAction("item", it)} title={it.desc}
+                      style={{ padding: "9px 6px", fontSize: 12, fontWeight: 800, opacity: ready ? 1 : 0.45 }}>
+                      {it.icon} {it.name} <span style={{ fontSize: 10 }}>×{count}</span>
+                      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.85, marginTop: 2 }}>{itemSummary(it)}</div>
                     </button>
                   );
                 })}
@@ -631,11 +837,11 @@ export default function TurnBattle({
           </div>
         )}
 
-        {/* ===== 睡眠ターン ===== */}
+        {/* ===== 睡眠・時間妨害・麻痺による強制休みターン ===== */}
         {phase === "sleep" && (
           <div className="bt-q-panel" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 40 }}>😴💤</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#a5b4fc" }}>ねむっていて うごけない…（あと{sleepRef.current}ターン）</div>
+            <div style={{ fontSize: 40 }}>{sleepRef.current > 0 ? "😴💤" : timejamRef.current > 0 ? "⏳" : "⚡"}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#a5b4fc" }}>{log}</div>
           </div>
         )}
 

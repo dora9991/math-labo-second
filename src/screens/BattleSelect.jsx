@@ -11,7 +11,8 @@ import { MONSTERS } from "../data/monsters.js";
 import { allChapters } from "../data/index.js";
 import { getPlayerBattleStats, battleBonuses } from "../engine/battle.js";
 import { levelTitle, playerLevel } from "../engine/scoring.js";
-import { isUnlocked, newlyUnlockedIds, unlockHint } from "../engine/unlock.js";
+import { isUnlocked, newlyUnlockedIds, unlockHint, isChapterMastered } from "../engine/unlock.js";
+import { CHAPTER_SKILLS } from "../data/chapterSkills.js";
 
 const AI_TAG = {
   plain: "", healer: "回復してくる", mage: "魔法を使う",
@@ -32,7 +33,7 @@ function Stars() {
   return <div className="battle-stars">{stars}</div>;
 }
 
-export default function BattleSelect({ player, clearedIds, onSelect, onBack, onSeen }) {
+export default function BattleSelect({ player, clearedIds, onSelect, onBack, onSeen, onClaimSkill = null, onOpenLoadout = null }) {
   const cleared = clearedIds || new Set();
   const lv = playerLevel(player);            // 現在ワールド（学年）のレベル
   const bonuses = battleBonuses(player);     // 装備＋計算王の上昇率
@@ -44,8 +45,13 @@ export default function BattleSelect({ player, clearedIds, onSelect, onBack, onS
   const inWorld = (m) => m && m.grade === world;
 
   // 入室した瞬間の「新しく解放された敵」を覚えておく（バナー＆NEWバッジ用・このワールド内のみ）
+  //  小単元ボス(unitSmallBoss)はこの画面にカードを出さない（学習サイクルから挑む専用）ので、
+  //  NEW集計に含めると「見つからない新しい敵」の幽霊カウントになる。ここでは除外する。
   const [newly] = useState(() => new Set(
-    newlyUnlockedIds(player, cleared).filter((id) => inWorld(MONSTERS.find((m) => m.id === id)))
+    newlyUnlockedIds(player, cleared).filter((id) => {
+      const m = MONSTERS.find((x) => x.id === id);
+      return inWorld(m) && m.kind !== "unitSmallBoss";
+    })
   ));
   // 見たことにする（次回からはNEWを出さない）
   useEffect(() => {
@@ -142,6 +148,13 @@ export default function BattleSelect({ player, clearedIds, onSelect, onBack, onS
       <div className="battle-content">
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#7fff7f", letterSpacing: 2 }}>⚔️ バトルモード</div>
+          {onOpenLoadout && (
+            <button onClick={onOpenLoadout} data-sfx="none" style={{
+              marginTop: 6, padding: "6px 14px", borderRadius: 10, cursor: "pointer",
+              border: "1px solid rgba(196,181,253,.5)", background: "rgba(139,92,246,.15)",
+              color: "#d8b4fe", fontSize: 12, fontWeight: 800,
+            }}>🎒 ロードアウト（装備中のスキルを選ぶ）</button>
+          )}
           <div style={{ fontSize: 13, fontWeight: 900, color: "#fde047", marginTop: 2 }}>
             🌍 {GRADE_LABEL[world] || `中${world}`}ワールド
           </div>
@@ -181,14 +194,35 @@ export default function BattleSelect({ player, clearedIds, onSelect, onBack, onS
         {chapters.map((ch) => {
           const units = MONSTERS.filter((m) => m.kind === "unit" && m.chapterId === ch.id);
           const boss = MONSTERS.find((m) => m.kind === "chapterBoss" && m.chapterId === ch.id);
+          const ladder = MONSTERS.filter((m) => m.kind === "unitBoss" && m.chapterId === ch.id).sort((a, b) => a.tier - b.tier);
           return (
             <div key={ch.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 2px 6px", borderBottom: `1px solid ${ch.color}55`, paddingBottom: 4 }}>
                 <span style={{ fontSize: 18 }}>{ch.emoji}</span>
                 <span style={{ fontSize: 14, fontWeight: 900, color: ch.color }}>{ch.name}</span>
               </div>
+              {onClaimSkill && isChapterMastered(player, ch.id) && !player.ownedChapterSkills?.[ch.id] && (
+                <button onClick={() => onClaimSkill(ch.id)} data-sfx="none" style={{
+                  width: "100%", margin: "0 0 8px", padding: "9px 10px", borderRadius: 10, cursor: "pointer",
+                  border: "1px solid #fde047", background: "rgba(250,204,21,.14)", color: "#fde047",
+                  fontSize: 12.5, fontWeight: 900, textAlign: "center",
+                }}>
+                  🎁 計算マスター達成！「{CHAPTER_SKILLS[ch.id]?.name}」のスキルガチャを引く
+                </button>
+              )}
+              {player.ownedChapterSkills?.[ch.id] && (
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#a7f3d0", margin: "0 2px 6px" }}>
+                  ✨ {CHAPTER_SKILLS[ch.id]?.name}（{player.ownedChapterSkills[ch.id]}ランク）を獲得済み
+                </div>
+              )}
               {units.map((m) => <MonsterCard key={m.id} m={m} />)}
               {boss && <MonsterCard key={boss.id} m={boss} />}
+              {ladder.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "8px 2px 4px" }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: ch.color }}>🪜 ボスの梯子（応用・BP制）</span>
+                </div>
+              )}
+              {ladder.map((m) => <MonsterCard key={m.id} m={m} />)}
             </div>
           );
         })}

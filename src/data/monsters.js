@@ -16,6 +16,7 @@
 import { allChapters } from "./index.js";
 import { playerAtkForLevel, playerHpForLevel, enemyAtkForLevel } from "../engine/battle.js";
 import { hueFromId } from "./monsterImages.js";
+import { CHAPTER_ENEMY_PATTERN } from "./chapterSkills.js";
 
 // ★RPG進行は全学年（中1→中2→中3）を1本の冒険としてつなぐ。
 const RPG_CHAPTERS = allChapters();
@@ -30,6 +31,9 @@ const TOTAL_UNITS = RPG_CHAPTERS.reduce((s, c) => s + c.units.length, 0);
 // 自然に到達できる推奨レベルにする（バトル報酬XPも増えるため噛み合う）。
 const UNIT_MAX_LV = 42;  // 最深部の小単元モンスターの推奨レベル
 const MAOU_LV = 48;      // 魔王（最終ボス）の推奨レベル＝全章クリアで届く範囲
+
+// 単元別ボスの梯子（2026-07-18設計）のBP列＝各ランク上限(D140/C180/B220/A260/S300/SS350)-10
+export const BOSS_LADDER_BP = [130, 170, 210, 250, 290, 340];
 
 // ── 裏ボス（隠しボス）：魔王を倒したあと、段階的に解放される“もっと強い敵” ──
 //   推奨レベルは 80 → 300 まで。各学年ワールドに同じ並びで用意（worldXp は学年独立なので
@@ -362,6 +366,92 @@ for (const g of GRADE_WORLDS) {
       deathColors: bossArt.deathColors,
     });
   });
+
+  // ── 単元別ボスの梯子（2026-07-18設計・BP制。今は中1の7章のみ試作） ──
+  //   各章の全小単元を計算マスターにすると挑戦可能になる6段のボス列。
+  //   HPは全ボス共通1000、BPは各ランク上限-10（130/170/210/250/290/340）。
+  //   ボス2以降は他章の「属性」（＝その章の敵パターン。chapterSkills.jsのCHAPTER_ENEMY_PATTERN）
+  //   も使ってくる（ボスN＝N種類の技をpatternPoolに持ち、ターンごとにランダムに使い分ける）。
+  //   BP比ダメージ式（engine/battleTurn.js の isCompanionBattle/bpDamage）で実際に戦える。
+  //   （設計: Obsidian「設計_単元別戦闘力とHP1000化_2026-07-18」）。
+  if (g === 1) {
+    chaptersOfGrade.forEach((chap) => {
+      const others = chaptersOfGrade.filter((c) => c.id !== chap.id).map((c) => c.id);
+      let prevId = null;
+      BOSS_LADDER_BP.forEach((bp, i) => {
+        const tier = i + 1;
+        const attrChapters = [chap.id, ...others.slice(0, tier - 1)];
+        const patternPool = attrChapters.map((cid) => CHAPTER_ENEMY_PATTERN[cid]).filter(Boolean);
+        const id = `bl_${chap.id}_${tier}`;
+        MONSTERS.push({
+          id,
+          kind: "unitBoss",
+          grade: g,
+          chapterId: chap.id,
+          tier,
+          bp,
+          prevId,
+          name: `${chap.name}の試練・第${tier}段`,
+          unit: `${chap.name}・ボスの梯子`,
+          hp: 1000,
+          atk: bp, // 表示用（一覧カードのステータス表示に流用）
+          reward: 40 + tier * 30,
+          minLv: 1,
+          attributes: attrChapters, // 使う「属性」＝関連章idの配列（自章＋tier-1個の他章）
+          patternPool,             // 実際にターンごとに使う技（engine/battleTurn.js pickBossPattern）
+          ai: "super",
+          role: "boss",
+          roleTag: `ボス${tier}段・BP${bp}`,
+          pools: chap.units.map((u) => ({ c: chap.id, u: u.id })),
+          bossAdvancedOnly: true,
+          art: "boss",
+          svgDefs: bossArt.svgDefs,
+          svg: bossArt.svg,
+          idleExtra: bossArt.idleExtra,
+          deathColors: bossArt.deathColors,
+          color: chap.color,
+        });
+        prevId = id;
+      });
+    });
+  }
+
+  // ── 小単元ボス（2026-07-19設計・BP制） ──
+  //   「応用」の隣に追加。ためすクリア(15問)で挑戦可能。初回撃破でクリスタル+1
+  //   （クリスタルは単元別スキルの確定強化＝levelUpChapterSkillに使う。ガチャより先に、
+  //   小単元ボス戦を新設した経緯：Obsidian「設計_単元別戦闘力とHP1000化_2026-07-18」）。
+  //   ザコ(BP100)より一段強い、章ボス梯子の第1段(BP130)よりさらに一段強いBP150。
+  if (g === 1) {
+    chaptersOfGrade.forEach((chap) => {
+      chap.units.forEach((u) => {
+        MONSTERS.push({
+          id: `su_${u.id}`,
+          kind: "unitSmallBoss",
+          grade: g,
+          chapterId: chap.id,
+          unitId: u.id,
+          bp: 150,
+          name: `${u.name}の強敵`,
+          unit: `${u.name}・小単元ボス`,
+          hp: 1000,
+          atk: 150, // 表示用
+          reward: 50,
+          minLv: 1,
+          ai: "super",
+          role: "boss",
+          roleTag: "小単元ボス・BP150",
+          pools: [{ c: chap.id, u: u.id }],
+          bossAdvancedOnly: true,
+          art: "boss",
+          svgDefs: bossArt.svgDefs,
+          svg: bossArt.svg,
+          idleExtra: bossArt.idleExtra,
+          deathColors: bossArt.deathColors,
+          color: chap.color,
+        });
+      });
+    });
+  }
 
   // ── 最終ボス・数学の魔王（その学年の章ボスを全て倒すと解放・学年の発展） ──
   const unitMaxLv = Math.max(...MONSTERS.filter((m) => m.kind === "unit" && m.grade === g).map((m) => m.minLv), 1);

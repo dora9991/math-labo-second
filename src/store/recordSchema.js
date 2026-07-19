@@ -97,6 +97,10 @@ export function initialPlayerState(studentId) {
     worldCleared: { 1: 0, 2: 0, 3: 0 }, // ★レベルの素：学年ごとに「サイクルをクリアした単元数」。レベル=1+これ
     relearnSolved: 0,  // 学び直しで解いた問題の累計
     item: null,        // 所持アイテム（id 文字列。1つだけ持てる。バトルで使うと消費）
+    items: {},         // 新アイテムシステム（2026-07-19復活・ガチャ方式）：{ itemId: 個数 }。合計10個までストック
+    equippedItems: [], // バトルに持ち込むアイテム（最大2種類、itemIdの配列）
+    ownedUltimates: { fire: true }, // 所持している必殺技（ガチャで獲得。最初から「ファイアバースト」を1つ持っている）
+    equippedUltimate: "fire", // 装備中の必殺技id（data/ultimates.js DEFAULT_ULTIMATE_IDと一致）
     // ガチャ装備：owned={id:個数}, 装備中の武器/防具id。初期から「剣＋盾」を装備して持っている。
     gacha: { owned: { w2: 1, a2: 1 }, weapon: "w2", armor: "a2" },
     gear: { swordStones: 0, armorStones: 0 }, // 剣石・鎧石（応用クリアで増え、装備が少し育つ・上限あり）
@@ -203,5 +207,12 @@ export function normalizePlayerState(p) {
   // 装備中スキルが未所持なら基本スキルへフォールバック
   if (!out.ownedSkills.includes(out.equip[1])) out.equip[1] = base.equip[1];
   if (!out.ownedSkills.includes(out.equip[2])) out.equip[2] = base.equip[2];
+  // 新アイテムシステム（2026-07-19復活）：ストック・持ち込み枠の型を補完
+  out.items = (p.items && typeof p.items === "object") ? p.items : {};
+  out.equippedItems = Array.isArray(p.equippedItems) ? p.equippedItems.filter((id) => (out.items[id] || 0) > 0).slice(0, 2) : [];
+  // 必殺技ガチャ（2026-07-19設計）：未所持なら最初から持っている「ファイアバースト」を補完
+  out.ownedUltimates = (p.ownedUltimates && typeof p.ownedUltimates === "object" && Object.keys(p.ownedUltimates).length)
+    ? p.ownedUltimates : { fire: true };
+  out.equippedUltimate = (p.equippedUltimate && out.ownedUltimates[p.equippedUltimate]) ? p.equippedUltimate : "fire";
   return out;
 }

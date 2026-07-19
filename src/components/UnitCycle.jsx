@@ -4,11 +4,14 @@
 //   [📺講義][✏️ためす][📖なおす][🧮応用] の行が出る。
 //   ・ためす を押すと「れんしゅう / バトル」を選べる（その小単元で）。
 //   ・講義/れんしゅう はその小単元を直接ひらく。なおす/応用は共通へ。
+//   ・2026-07-19：講義未クリアでも4ボタンは最初から全部表示（心理的ハードルを下げる狙い）。
+//    唯一「⚔️小単元ボス」だけは従来どおり ためす15問クリア(tameC)で解放。
 // ============================================================
 import { useState } from "react";
 import { chaptersForGrade } from "../data/index.js";
 import { findHaichiLessonForUnit } from "../data/haichiCourse.js";
 import { CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET } from "../engine/scoring.js";
+import { isChapterMastered } from "../engine/unlock.js";
 
 // 講義（確認問題）をクリアしたか：その単元に対応する葉一レッスンの key を引いて
 //  haichiPassed（確認問題に合格した動画）に入っているかで判定する。
@@ -23,7 +26,7 @@ function lectureCleared(unitId, haichiPassed, noVideoLecturePassed) {
 
 const CALC_KING_CLEAR_STREAK = 5; // 計算王＝5問連続正解でその章クリア（engine/battle.js と一致）
 
-export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {}, noVideoLecturePassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onTeacher, onPractice, onBattle, onRelearn, onChallenge, onDiagnose }) {
+export default function UnitCycle({ player, grade = 1, cycleMap = {}, haichiPassed = {}, noVideoLecturePassed = {}, calcKing = {}, mistakeUnitIds = [], onHaichi, onTeacher, onPractice, onBattle, onRelearn, onChallenge, onDiagnose, onBossChallenge, onUnitBoss }) {
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
@@ -148,19 +151,6 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
                   {hasVideo ? "どちらかで学んだら「確認問題」で講義クリア！" : "教師モードの中の「確認問題」で講義クリア！"}
                 </div>
               </>
-            ) : !lectureC ? (
-              // ① まずは講義。動画がある単元は はいち動画/教師モード をえらぶ、無い単元は教師モードへ直行。
-              //  確認問題ぜんぶ正解で「ためす」が出る。
-              <>
-                <div style={{ display: "flex" }}>
-                  {hasVideo
-                    ? stepBtn(() => setLect(u.id), "📺 講義（動画・教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#ef4444,#dc2626)", false)
-                    : stepBtn(() => onTeacher?.(u), "🧑‍🏫 講義（教師モード＋確認問題）で まなぶ", "linear-gradient(135deg,#8b5cf6,#6366f1)", false)}
-                </div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
-                  確認問題ぜんぶ正解すると「✏️ ためす」が出るよ
-                </div>
-              </>
             ) : tame === u.id ? (
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC, "じっくり計算して、確実にレベルアップしよう！")}
@@ -168,18 +158,47 @@ export default function UnitCycle({ grade = 1, cycleMap = {}, haichiPassed = {},
                 {stepBtn(() => setTame(null), "← もどる", "rgba(255,255,255,.12)")}
               </div>
             ) : (
-              <div style={{ display: "flex", gap: 6 }}>
-                {stepBtn(() => hasVideo ? setLect(u.id) : onTeacher?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
-                {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
-                {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
-                {stepBtn(() => onChallenge?.(ch, u), "🧮 応用",
-                  tameC && !ouyouC ? "linear-gradient(135deg,#a855f7,#8b5cf6)" : "rgba(139,92,246,.5)",
-                  ouyouC, tameC && !ouyouC ? "ためすクリア！挑戦しよう" : null)}
-              </div>
+              <>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {stepBtn(() => hasVideo ? setLect(u.id) : onTeacher?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
+                  {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
+                  {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
+                  {stepBtn(() => onChallenge?.(ch, u), "🧮 応用",
+                    tameC && !ouyouC ? "linear-gradient(135deg,#a855f7,#8b5cf6)" : "rgba(139,92,246,.5)",
+                    ouyouC, tameC && !ouyouC ? "ためすクリア！挑戦しよう" : null)}
+                </div>
+                {/* 小単元ボス（2026-07-19設計）：ためすクリアで挑戦可能。初回撃破でクリスタル獲得 */}
+                {onUnitBoss && tameC && (
+                  <div style={{ display: "flex", marginTop: 6 }}>
+                    {stepBtn(() => onUnitBoss(u), "⚔️ 小単元ボスに挑戦", "linear-gradient(135deg,#dc2626,#f59e0b)", false, "強敵！初回撃破でクリスタル獲得")}
+                  </div>
+                )}
+              </>
             )}
           </div>
           );
         })}
+
+        {/* 章のまとめにチャレンジ！：全小単元クリアでボスの梯子(第1段〜)に挑戦できる */}
+        {onBossChallenge && (() => {
+          const mastered = isChapterMastered(player, ch.id);
+          return (
+            <button
+              onClick={() => mastered && onBossChallenge(ch.id)}
+              disabled={!mastered}
+              data-sfx="none"
+              style={{
+                marginTop: 4, padding: "13px 14px", borderRadius: 12, cursor: mastered ? "pointer" : "not-allowed",
+                border: mastered ? "2px solid #fde047" : "1px solid rgba(255,255,255,.15)",
+                background: mastered ? "linear-gradient(135deg,#f59e0b,#d97706)" : "rgba(255,255,255,.05)",
+                color: mastered ? "#fff" : "rgba(255,255,255,.4)", fontWeight: 900, fontSize: 13, textAlign: "center",
+              }}
+            >
+              🏆 章のまとめにチャレンジ！
+              {!mastered && <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>全部の単元を計算マスターにすると挑戦できるよ</div>}
+            </button>
+          );
+        })()}
       </div>
     </div>
   );

@@ -204,6 +204,8 @@
 /* プレイヤー枠 */
 .bt-player { display: flex; justify-content: space-between; align-items: center; }
 .bt-player-name { color: #7fff7f; font-size: 14px; }
+/* Dランク仲間モンスター試作（正負c1）：HPバー＋ATK/DEF行を縦に積む */
+.bt-player-companion { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 
 /* モンスター選択カード */
 .bt-select-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer; }
