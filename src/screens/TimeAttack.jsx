@@ -155,7 +155,7 @@ export default function TimeAttack({ player, chapter, unit, level, onComplete, o
     // 苦手モード：単元の星は付けず、XPは控えめ（正解ベース＋連続ボーナス−ミス）
     if (weak) {
       const xp = Math.max(0, correct * XP_PER_CORRECT + streakBonus - wrong * XP_PENALTY_PER_WRONG);
-      const coins = timeAttackCoins({ correct, stars: 0 });
+      const coins = timeAttackCoins({ correct, level });
       setSummary({ xp, baseXp: xp, mult: 1, penalty: wrong * XP_PENALTY_PER_WRONG, coins, dailyBonus: 0 });
       onComplete({ correct, wrong, stars, maxStreak, xp, coins, results, weak: true, kills });
       return;
@@ -167,7 +167,7 @@ export default function TimeAttack({ player, chapter, unit, level, onComplete, o
     // 1日1回ボーナス：その日まだボーナスを得ておらず、今回クリア（星1以上）なら+50XP。
     const dailyBonus = (stars >= 1 && player.lastDailyBonusDate !== todayStr()) ? DAILY_BONUS_XP : 0;
     const xp = Math.round(baseXp * mult) + dailyBonus;
-    const coins = timeAttackCoins({ correct, stars });
+    const coins = timeAttackCoins({ correct, level });
     const crystal = timeAttackCrystal({ correct, wrong, stars });
     setSummary({ xp, baseXp, mult, penalty: wrong * XP_PENALTY_PER_WRONG, coins, crystal, dailyBonus });
     onComplete({ chapter, unit, level, correct, wrong, stars, maxStreak, xp, coins, results, kills, dailyBonus });

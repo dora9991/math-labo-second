@@ -1,25 +1,28 @@
 // ============================================================
 // Login.jsx — 子ども向けログイン画面（メール不要）。
-//  ・初めての人：ID・合言葉（パスワード）だけを自分で決めて登録。
-//    ニックネームは最初はIDと同じ（あとでキャラクター設定からいつでも変更可）。
-//  ・2回目以降：IDは前回の記憶から自動で入っていて、合言葉を入れるだけ。
-//  ・「自動ログイン」にチェックすると、次回はそれすら省略して直接入れる
-//    （共有の端末では毎回チェックを外すことをすすめる）。
+//  2026-08-04改修：「ログイン」と「新規登録」を別の画面（モード）に分離。
+//   ・ログイン（既定）：登録ずみのID・合言葉を入れる。存在しないID／まちがった合言葉は
+//     どちらも「IDまたはパスワードが ちがいます」で失敗する（自動でアカウントは作らない）。
+//   ・新規登録：ボタンから切りかえ、ID・合言葉を自分で決めて登録する。
+//     そのIDが既に使われていれば「そのIDは すでに使われています」と表示する。
+//  「自動ログイン」にチェックすると、次回はそれすら省略して直接入れる
+//  （共有の端末では毎回チェックを外すことをすすめる）。
 //  認証ON（Supabase設定済み）のときだけ AuthGate から表示される。
 // ============================================================
 import { useState } from "react";
-import { signInKid } from "../auth/kidAuth.js";
+import { loginKid, registerKid } from "../auth/kidAuth.js";
 import { getRememberedId, setRememberedId, getAutoLogin, setAutoLogin } from "../auth/loginPrefs.js";
 
 export default function Login({ onDone }) {
   const remembered = getRememberedId();
-  const [isNewMode, setIsNewMode] = useState(!remembered); // 記憶ID無し＝初めての人モード
+  const [mode, setMode] = useState("login"); // "login" | "register"
   const [id, setId] = useState(remembered);
   const [pin, setPin] = useState("");
   const [autoLogin, setAutoLoginState] = useState(() => getAutoLogin());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  const isRegister = mode === "register";
   const ready = id.trim() && /^\d{4}$/.test(pin);
 
   async function submit(e) {
@@ -27,21 +30,24 @@ export default function Login({ onDone }) {
     if (!ready || busy) return;
     setBusy(true); setErr("");
     try {
-      const { uid } = await signInKid(id, pin, id); // ニックネームの初期値はID（あとで設定変更可）
+      const { uid } = isRegister
+        ? await registerKid(id, pin, id) // ニックネームの初期値はID（あとで設定変更可）
+        : await loginKid(id, pin);
       setRememberedId(id);
       setAutoLogin(autoLogin);
       onDone?.(uid);
     } catch (e2) {
-      setErr(e2.message || "ログインできませんでした。");
+      setErr(e2.message || (isRegister ? "とうろくできませんでした。" : "ログインできませんでした。"));
       setBusy(false);
     }
   }
 
-  function switchToNew() {
-    setIsNewMode(true);
-    setId("");
+  function switchMode(next) {
+    setMode(next);
     setPin("");
     setErr("");
+    if (next === "register") setId(""); // 登録は新しいIDを決めるので空にする
+    else setId(remembered);
   }
 
   const inp = {
@@ -57,7 +63,7 @@ export default function Login({ onDone }) {
         <div style={{ fontSize: 30 }}>📐</div>
         <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", margin: "2px 0 2px" }}>数学ラボ2</div>
         <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", marginBottom: 18 }}>
-          {isNewMode ? "ログインして はじめよう" : "おかえりなさい！"}
+          {isRegister ? "新規登録：IDと合言葉を決めよう" : remembered ? "おかえりなさい！" : "ログインして はじめよう"}
         </div>
 
         <div style={{ textAlign: "left", marginBottom: 12 }}>
@@ -81,12 +87,10 @@ export default function Login({ onDone }) {
           </div>
         )}
 
-        {!isNewMode && (
-          <button type="button" onClick={switchToNew} data-sfx="none"
-            style={{ marginTop: 10, background: "none", border: "none", color: "#7dd3fc", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 4 }}>
-            🔁 ちがうIDを つかう（はじめての人はこちら）
-          </button>
-        )}
+        <button type="button" onClick={() => switchMode(isRegister ? "login" : "register")} data-sfx="none"
+          style={{ marginTop: 10, background: "none", border: "none", color: "#7dd3fc", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 4 }}>
+          {isRegister ? "🔁 もう登録した人はこちら（ログイン）" : "🆕 はじめての人はこちら（新規登録）"}
+        </button>
 
         {err && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#fca5a5", margin: "10px 0 0", lineHeight: 1.5 }}>⚠️ {err}</div>}
 
@@ -94,12 +98,12 @@ export default function Login({ onDone }) {
           width: "100%", marginTop: 16, padding: "14px", borderRadius: 13, border: "none",
           cursor: ready && !busy ? "pointer" : "not-allowed", fontSize: 16, fontWeight: 900, color: "#fff",
           background: ready && !busy ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(255,255,255,.12)",
-        }}>{busy ? "…" : isNewMode ? "▶ はじめる" : "▶ ログイン"}</button>
+        }}>{busy ? "…" : isRegister ? "▶ とうろくする" : "▶ ログイン"}</button>
 
         <div style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", marginTop: 14, lineHeight: 1.6 }}>
-          {isNewMode
+          {isRegister
             ? <>IDと合言葉は自分で決めよう。わすれないようにメモしておいてね！<br />ニックネーム（呼び名）は はじめはIDと同じ。あとから「🎨キャラクター」でいつでも変えられるよ。</>
-            : <>ID・合言葉が ちがう人は「ちがうIDを つかう」を押してね。</>}
+            : <>ID・合言葉を わすれた人は先生に相談してね。</>}
         </div>
       </form>
     </div>

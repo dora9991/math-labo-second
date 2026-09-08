@@ -5,9 +5,10 @@
 //   ・email：ID の決定論ハッシュ ＠mathlabo.local
 //     → 同じIDなら必ず同じメール＝再ログインできる。日本語のIDでもOK（ハッシュ化）。
 //   ・password：あいことば（パスワード）を prefix でパディング。
-//  初回ログイン（サインイン失敗）は自動でアカウント作成（自己登録）。
-//  以降は同じID＋あいことばでサインイン。ニックネームは新規登録のときだけ使う
-//  （既存アカウントのニックネームは上書きしない＝設定画面での変更を壊さない）。
+//  登録（registerKid）とログイン（loginKid）は別の関数（2026-08-04〜：以前は
+//  「サインイン失敗→自動で新規作成」という一体型(signInKid)だったが、存在しないIDでも
+//  勝手にアカウントができてしまい紛らわしいため分離。登録済みIDでの登録はエラーに、
+//  存在しないIDでのログインもエラーにする（自動生成しない））。
 //  ※ Supabase 側で「Confirm email」を OFF にしておくこと（.local メールは確認できないため）。
 // ============================================================
 import { supabase } from "./supabase.js";
@@ -31,31 +32,50 @@ export async function getUser() {
 }
 
 /**
- * 子どもログイン。成功で { uid, isNew } を返す。失敗は分かりやすい日本語で throw。
- *  流れ：サインイン試行 → 失敗なら新規作成（このときだけ nickname を使う）。
- * @param {string} id       ログイン用のID（本人が決める）
- * @param {string} pin      あいことば（パスワード）
- * @param {string} nickname 新規登録のときだけ使う表示名（既存アカウントには影響しない）
+ * 新規登録専用。そのIDが既に使われていれば分かりやすいメッセージで失敗する（自動ログインはしない）。
+ * @param {string} id       これから使うID（本人が決める）
+ * @param {string} pin      あいことば（パスワード・すうじ4つ）
+ * @param {string} nickname 表示名の初期値（あとでキャラクター設定から変更可）
  */
-export async function signInKid(id, pin, nickname = "") {
+export async function registerKid(id, pin, nickname = "") {
+  if (!supabase) throw new Error("ログイン機能はまだ準備中です（Supabase未設定）。");
+  const email = emailFor(id);
+  const password = passwordFor(pin);
+
+  const su = await supabase.auth.signUp({ email, password, options: { data: { display_name: nickname } } });
+  if (su.error) {
+    const msg = String(su.error.message || "");
+    if (/already registered|already exists|already been registered/i.test(msg)) {
+      throw new Error("そのIDは すでに使われています。ちがうIDを ためしてね。");
+    }
+    throw new Error("とうろくできませんでした：" + msg);
+  }
+  // Supabaseの仕様：メール確認OFFでも、既に使われているメールへのsignUpが
+  // 表面上エラーにならず「identities が空配列」で返ってくることがある（重複の別サイン）。
+  const identities = su.data?.user?.identities;
+  if (Array.isArray(identities) && identities.length === 0) {
+    throw new Error("そのIDは すでに使われています。ちがうIDを ためしてね。");
+  }
+  const uid = su.data?.user?.id;
+  if (!uid) throw new Error("アカウント作成に失敗しました。しばらくして もう一度ためしてね。");
+  await upsertStudent(uid, nickname, id);
+  return { uid };
+}
+
+/**
+ * ログイン専用。存在しないID・まちがったパスワードはどちらも同じメッセージで失敗する
+ * （どちらが原因か教えない＝IDの実在をあてずっぽうで探られないようにするため）。自動登録はしない。
+ * @param {string} id  登録ずみのID
+ * @param {string} pin あいことば（パスワード・すうじ4つ）
+ */
+export async function loginKid(id, pin) {
   if (!supabase) throw new Error("ログイン機能はまだ準備中です（Supabase未設定）。");
   const email = emailFor(id);
   const password = passwordFor(pin);
 
   const si = await supabase.auth.signInWithPassword({ email, password });
-  if (!si.error && si.data?.user) return { uid: si.data.user.id, isNew: false };
-
-  // サインイン失敗 → 新規作成を試す（初回ログイン＝自己登録）
-  const su = await supabase.auth.signUp({ email, password, options: { data: { display_name: nickname } } });
-  if (su.error) {
-    const msg = String(su.error.message || "");
-    if (/already registered|already exists/i.test(msg)) throw new Error("パスワードが ちがうかも。もう一度たしかめてね。");
-    throw new Error("ログインできませんでした：" + msg);
-  }
-  const uid = su.data?.user?.id;
-  if (!uid) throw new Error("アカウント作成に失敗しました。しばらくして もう一度ためしてね。");
-  await upsertStudent(uid, nickname, id);
-  return { uid, isNew: true };
+  if (si.error || !si.data?.user) throw new Error("IDまたはパスワードが ちがいます。");
+  return { uid: si.data.user.id };
 }
 
 export async function signOutKid() { if (supabase) await supabase.auth.signOut(); }

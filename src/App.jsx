@@ -13,7 +13,7 @@ import { AUTH_ENABLED } from "./auth/supabase.js";
 import { updateNickname, submitFeedback } from "./auth/kidAuth.js";
 import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
-import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, STEPUP_COIN_PER_CORRECT, RELEARN_COIN_PER_CORRECT, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
+import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, questionCoin, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
 import { genProblem, genProblemSeeded, makeChoices } from "./engine/generator.js";
 import { updateMastery, levelDifficulty, INITIAL_MASTERY } from "./engine/mastery.js";
 import * as bgm from "./audio/bgm.js";
@@ -75,6 +75,7 @@ import Loadout from "./screens/Loadout.jsx";
 import Items from "./screens/Items.jsx";
 import Ultimates from "./screens/Ultimates.jsx";
 import StatusMeter from "./screens/StatusMeter.jsx";
+import StudyLog from "./screens/StudyLog.jsx";
 import { challengeXp } from "./data/challenge.js";
 import { CHAPTERS, LEVEL_KEYS, chaptersForGrade, allChapters, findChapterByUnitId, findUnitById, findChapterById } from "./data/index.js";
 import { getWeakUnits, buildWeakUnit } from "./engine/weakness.js";
@@ -730,18 +731,18 @@ export default function App() {
       const newMistakes = store.addMistakes([m]);
       setData((d) => ({ ...d, mistakes: newMistakes }));
     }
-    // 学び直しは「学習のコア」：XP1.5倍（1問15）＋少額コイン。
+    // 学び直しは「学習のコア」：XP1.5倍（1問15）＋コイン（questionCoin()で他モードと統一）。
     //  ※クリスタルは「サイクルクリア（1単元）＝1個」だけに一本化（ドリップ廃止）。
     if (relearn) {
       updatePlayer((p) => ({
         ...p,
         relearnSolved: (p.relearnSolved || 0) + 1,
-        coins: (p.coins ?? 0) + (ok ? RELEARN_COIN_PER_CORRECT : 0), // 学び直しもコイン源に（王道サイクルの要）
+        coins: (p.coins ?? 0) + (ok ? questionCoin(level) : 0), // 学び直しもコイン源に（王道サイクルの要）
       }));
       addXp(ok ? Math.round(RELEARN_XP_PER_CORRECT * eventRelearnMult()) : 0); // 火曜=学び直しデーは2倍
     } else {
-      // ステップアップ(背骨)／じっくり：正解で1問10XP＋少額コイン（背骨を経済へ接続：設計メモ§10 Step1）
-      if (ok) updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + STEPUP_COIN_PER_CORRECT }));
+      // ステップアップ(背骨)／じっくり：正解で1問10XP＋コイン（questionCoin()で他モードと統一）
+      if (ok) updatePlayer((p) => ({ ...p, coins: (p.coins ?? 0) + questionCoin(level) }));
       addXp(ok ? 10 : 0);
     }
 
@@ -1403,17 +1404,16 @@ export default function App() {
     loginCheckedRef.current = true;
     const today = todayStr();
     if (!canClaimLogin(data.player, today)) return;
-    const { streak, reward, crystal, isFifth } = computeLogin(data.player, today);
-    // クリスタルは「サイクルクリア（1単元）＝1個」に一本化。5日連続の大ボーナスはコインに換算して付与。
-    const rewardCoins = Math.round((reward + crystal * 100) * eventCoinMult()); // 水曜=お金2倍
+    // ログインボーナスは常に100Gで固定（2026-07-19：5日連続の大ボーナス・曜日イベント倍率は廃止）
+    const { streak, reward } = computeLogin(data.player, today);
     updatePlayer((p) => ({
       ...p,
-      coins: (p.coins || 0) + rewardCoins,
+      coins: (p.coins || 0) + reward,
       loginStreak: streak,
       lastLoginDate: today,
     }));
     // 演出はホーム画面が落ち着いてから少し間を置いて出す（いきなり出ると慌ただしいため）
-    const t = setTimeout(() => setLoginBonus({ reward: rewardCoins, streak, crystal: 0, isFifth }), 1000);
+    const t = setTimeout(() => setLoginBonus({ reward, streak, crystal: 0, isFifth: false }), 1000);
     return () => clearTimeout(t);
   }, [screen]); // eslint-disable-line
 
@@ -1951,6 +1951,11 @@ export default function App() {
     return <StatusMeter player={data.player} onBack={() => setScreen("home")} />;
   }
 
+  // 学習記録（2026-07-29新設）：昨日の学習時間目安・単元別の問題数／直近7日間の合計とメーター
+  if (screen === "studyLog") {
+    return <StudyLog player={data.player} records={data.records} onBack={() => setScreen("home")} />;
+  }
+
   // ステータス詳細（単元・小単元ごとの理解度・正答率・AIの一言）
   if (screen === "status") {
     return <StatusDetail player={data.player} records={data.records} onBack={() => setScreen("home")} />;
@@ -2198,6 +2203,7 @@ export default function App() {
       onBattle={() => setScreen("battle")}
       onBossChallenge={challengeChapterBoss}
       onStatusMeter={() => setScreen("statusMeter")}
+      onStudyLog={() => setScreen("studyLog")}
       onUnitBoss={challengeUnitBoss}
       onRelearn={(unit) => { setRelearnFocus(unit?.id || null); setScreen("relearn"); }}
       onWeakness={() => { setRelearnFocus(null); setScreen("relearn"); }}

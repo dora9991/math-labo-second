@@ -142,20 +142,24 @@ export const RELEARN_XP_PER_CORRECT = 15;
 //        日をまたいで解けること＝保持の確認（分散効果）。失敗しても仮状態に戻すだけ（罰なし）。
 export const RELEARN_STREAK_TARGET = 2;    // その場の〈仮なおし〉に必要な連続正解数
 export const RELEARN_CONFIRM_CORRECT = 1;  // 翌日以降の確認で完全クリアに必要な正解数
-export const RELEARN_CONFIRM_COIN = 8;     // 翌日確認で完全になおしたときのごほうびコイン
+export const RELEARN_CONFIRM_COIN = 70;    // 翌日確認で完全になおしたときのごほうびコイン（クリスタルは出さない・2026-07-19に8→70へ引き上げ）
 
-// ── 背骨(StepUp/弱点克服)・学び直しを「報酬のある学習」にする（王道サイクルの要）──
-// 設計メモ§8/§10 Step1：背骨と丁寧な学習が“割に合わない”状態を是正。正解ごとに少額コインを付与
-//  （グラインドTA=3/正解と同等にして、速さで稼ぐより損しないように）。
-export const STEPUP_COIN_PER_CORRECT = 3;   // ステップアップ／じっくり練習の正解コイン
-export const RELEARN_COIN_PER_CORRECT = 3;  // 学び直しの正解コイン（XP/クリスタルは従来どおり）
+// ── お金の入手条件の統一（2026-07-19）：「1問正解=いくら」をゲーム全体で1本化 ──
+//  設計メモ§8/§10 Step1の発展形。TA・ステップアップ・学び直し・演習バトルなど、問題を解く
+//  すべての場面で同じ単価にする＝「たくさん問題を解く」こと自体がお金稼ぎに直結するようにする。
+export const QUESTION_COIN_STANDARD = 10; // 標準・かんたん問題 1問正解あたり
+export const QUESTION_COIN_ADVANCED = 15; // 発展・鬼問題 1問正解あたり
+/** その問題のレベルから、正解1問ぶんのコインを返す（発展・鬼は多め） */
+export function questionCoin(level) {
+  return (level === "advanced" || level === "oni") ? QUESTION_COIN_ADVANCED : QUESTION_COIN_STANDARD;
+}
 
 // ── マスターサイクル（王道一周）報酬：設計メモ§8柱2/§10 Step3 ──
 // 1単元を背骨(StepUp/じっくり)で解き重ねて“一周”したら一括の大報酬。
 // 「速く回す」より「丁寧に一周」がコイン/クリスタル効率で上回るようにする（飲まれ対策）。
 export const CYCLE_PRACTICE_TARGET = 15;  // ためすクリアに必要な演習の正解数（≒バトル1体ぶん／あんしん1.5ラウンド）
 export const CYCLE_RELEARN_TARGET = 1;    // なおすクリアに必要な学び直しの正解数
-export const MASTER_CYCLE_COIN = 120;     // 一周クリアのコイン束（TA1回=約30〜60より厚い）
+export const MASTER_CYCLE_COIN = 150;     // 小単元・初クリアのコイン束（2026-07-19に120→150へ引き上げ）
 export const MASTER_CYCLE_CRYSTAL = 1;    // 一周クリアのクリスタル（＝スキル1個ぶん。単元の数だけ集まる）
 
 /**
@@ -181,10 +185,11 @@ export function restMultiplier(cyclesToday = 0) {
   return 1;
 }
 
-/** タイムアタック1回で稼げるコイン（正解1問=3コイン＋星ボーナス）
- *  アイテム購入の元手。XPと違ってくり返しでも減らさない（コツコツ稼げる）。 */
-export function timeAttackCoins({ correct = 0, stars = 0 }) {
-  return correct * 3 + stars * 10;
+/** タイムアタック1回で稼げるコイン（questionCoin()で統一：標準10G・発展/鬼15G×正解数）
+ *  アイテム購入の元手。XPと違ってくり返しでも減らさない（コツコツ稼げる）。
+ *  2026-07-19：星ボーナスを廃止し、他モードと同じ「1問いくら」に統一。 */
+export function timeAttackCoins({ correct = 0, level } = {}) {
+  return correct * questionCoin(level);
 }
 
 // タイムアタックでクリスタルがもらえる最低正答率（連打・あてずっぽう除けの基準）。

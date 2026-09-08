@@ -17,7 +17,7 @@ const GRADE_COLOR = { 1: "#818cf8", 2: "#f43f5e", 3: "#fbbf24" }; // 中1=藍 �
 export default function Home({
   player, records, mistakeUnitIds = [], grade = 1, onSetGrade, restActive = false,
   onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitTeacher, onUnitPractice, onUnitBattle, onDiagnose, onBattle,
-  onBossChallenge, onStatusMeter, onUnitBoss, onLoadout, onItems, onUltimates,
+  onBossChallenge, onStatusMeter, onUnitBoss, onLoadout, onItems, onUltimates, onStudyLog,
   onDetail, onCharacter, onFeedback,
 }) {
   const availGrades = gradesWithChapters();
@@ -162,6 +162,21 @@ export default function Home({
               <span style={{ textAlign: "left" }}>
                 <span style={{ display: "block", fontSize: 12.5, fontWeight: 900 }}>自分のステータスを見る</span>
                 <span style={{ display: "block", fontSize: 9.5, fontWeight: 700, opacity: .65, lineHeight: 1.35 }}>各単元のBP（バトルポイント）メーターを確認しよう</span>
+              </span>
+            </button>
+          )}
+
+          {/* 学習記録（2026-07-29新設：昨日の学習時間・単元別の問題数／直近7日間の合計とメーター） */}
+          {onStudyLog && (
+            <button data-sfx="none" onClick={onStudyLog} style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4,
+              padding: "11px 12px", borderRadius: 13, cursor: "pointer", fontFamily: "inherit",
+              border: "1.5px solid rgba(96,165,250,.4)", background: "rgba(96,165,250,.10)", color: "#fff",
+            }}>
+              <span style={{ fontSize: 20 }}>📅</span>
+              <span style={{ textAlign: "left" }}>
+                <span style={{ display: "block", fontSize: 12.5, fontWeight: 900 }}>学習記録</span>
+                <span style={{ display: "block", fontSize: 9.5, fontWeight: 700, opacity: .65, lineHeight: 1.35 }}>昨日と直近7日間の学習量をふりかえろう</span>
               </span>
             </button>
           )}
