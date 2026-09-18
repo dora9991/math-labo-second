@@ -11,6 +11,7 @@ import Login from "../screens/Login.jsx";
 import { AUTH_ENABLED, supabase } from "./supabase.js";
 import { setActiveUid, getActiveUid } from "./session.js";
 import { getAutoLogin, setAutoLogin, setRememberedId } from "./loginPrefs.js";
+import { touchLastLogin } from "./kidAuth.js";
 
 export default function AuthGate() {
   if (!AUTH_ENABLED) return <App />; // 認証OFF＝従来どおり
@@ -31,11 +32,13 @@ export default function AuthGate() {
       }
       setActiveUid(u?.id || null);
       setUser(u);
+      if (u) touchLastLogin(u.id); // ログイン履歴：開いただけでも痕跡を残す（何も解かなくても記録される）
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       const u = session?.user || null;
       setActiveUid(u?.id || null);
       setUser(u);
+      if (u) touchLastLogin(u.id);
     });
     return () => { alive = false; sub?.subscription?.unsubscribe(); };
   }, []);

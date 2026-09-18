@@ -18,6 +18,7 @@ import MathText from "../components/MathText.jsx";
 import QuestionText from "../components/QuestionText.jsx";
 import DrawPad from "../components/DrawPad.jsx";
 import * as sfx from "../audio/sfx.js";
+import { logAnswer } from "../store/answerLog.js";
 import { genProblem, genProblemSeeded, makeChoices } from "../engine/generator.js";
 import { genToketa, hasToketa } from "../data/toketa/index.js";
 import ToketaHint from "../components/ToketaHint.jsx";
@@ -129,10 +130,13 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
     if (!q || locked || phase !== "playing") return;
     setLocked(true); setSelected(idx);
     const ok = ansEq(val, q);
+    const mistakeTag = ok ? null : tagForChoice(q, val);
     setTotal((t) => t + 1);
     updateNavDifficulty(ok); // ④ 次の問題の難易度を調整（nav時のみ）
     // サーバー権威(Lv2)の影運用：seedがある問題（toketa/DB以外）だけ裏で送信
     onAttempt?.({ unitId: q.unitId, level: q.level, templateId: q.id, seed: q.seed ?? null, userAnswer: String(val), ok, skill: q.skill });
+    // 正答・誤答どちらも中身をサーバへ記録（教師が後から見返せるように。失敗しても進行には影響しない）。
+    logAnswer({ unitId: q.unitId, level: q.level, mode: anshin ? "slow-anshin" : "slow", q: q.q, ans: q.ans, userAnswer: String(val), ok, mistakeTag });
 
     if (ok) {
       const ns = streak + 1;
@@ -162,7 +166,7 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
     } else {
       // 間違えた問題を学び直しへ送るため記録（あんしん／じっくり両方）。skillタグも付ける。
       // mistakeTag＝選んだ誤答選択肢の診断タグ（toketa問題のみ・誤答の「価値づけ」に使う）
-      wrongsRef.current.push({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level, skill: q.skill, ok: false, mistakeTag: tagForChoice(q, val) });
+      wrongsRef.current.push({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level, skill: q.skill, ok: false, mistakeTag });
       // ★1 あんしんモードは失敗で階段が減らない（やさしい言葉かけ）
       if (!anshin) setStreak(0);
       sfx.wrong();

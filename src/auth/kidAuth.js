@@ -80,6 +80,14 @@ export async function loginKid(id, pin) {
 
 export async function signOutKid() { if (supabase) await supabase.auth.signOut(); }
 
+/** ログインのたびに students.last_login を更新する（＝ログイン履歴。何も解かずに終わっても痕跡が残る）。失敗しても致命的ではない。 */
+export async function touchLastLogin(uid) {
+  if (!supabase || !uid) return;
+  try {
+    await supabase.from("students").update({ last_login: new Date().toISOString() }).eq("id", uid);
+  } catch { /* noop */ }
+}
+
 /** ログイン中の生徒の登録ID（students.class_code＝本人が決めたID）を取得。quiz連携などID突合に使う。取れなければnull。 */
 export async function getMyClassCode() {
   if (!supabase) return null;

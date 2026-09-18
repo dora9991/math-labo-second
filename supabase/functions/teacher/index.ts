@@ -8,9 +8,12 @@
 //   デプロイ: npx supabase functions deploy teacher --use-api --no-verify-jwt
 //
 //  返すもの（生徒ごと）:
-//   name / loginId / level(=1+クリア単元数) / coins / crystals / lastActive /
+//   name / loginId / level(=1+クリア単元数) / coins / crystals / lastActive / lastLogin /
 //   units: { 小単元ID: { t:解答数, c:正解数 } }  ← attempts をサーバー側で集計（正答率の元）
 //   cleared: [クリア済み小単元ID]                ← player_state.state.cycle（サーバー権威）
+//   log: [{ createdAt, unitId, level, mode, q, ans, userAnswer, ok, mistakeTag }, ...]
+//     ← answer_log（解答の中身。直近30件・新しい順）。lastLoginは「解いていなくても
+//        ログインだけした」痕跡（students.last_login、AuthGate.jsxが毎回更新）。
 // ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -35,9 +38,9 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
-  // ① 生徒一覧
+  // ① 生徒一覧（last_login＝ログイン履歴。何も解かず開いただけでもここだけは残る）
   const { data: students, error: se } = await svc
-    .from("students").select("id, name, class_code, created_at").order("created_at");
+    .from("students").select("id, name, class_code, created_at, last_login").order("created_at");
   if (se) return json({ error: String(se.message || se) }, 500);
 
   // ② サーバー権威の状態（レベル・クリア済み単元）
@@ -71,6 +74,22 @@ Deno.serve(async (req: Request) => {
     if (page === 99) truncated = true;
   }
 
+  // ④ 解答の中身ログ（answer_log）：生徒ごとに直近30件だけ持たせる（教師が見返す用・重くしすぎない）。
+  const LOG_PER_STUDENT = 30;
+  const logBy: Record<string, any[]> = {};
+  {
+    const { data: rows, error: le } = await svc
+      .from("answer_log")
+      .select("student_id, unit_id, level, mode, q, ans, user_answer, ok, mistake_tag, created_at")
+      .order("created_at", { ascending: false })
+      .limit(3000);
+    if (le) return json({ error: String(le.message || le) }, 500);
+    for (const r of rows || []) {
+      const arr = (logBy[r.student_id] ||= []);
+      if (arr.length < LOG_PER_STUDENT) arr.push(r);
+    }
+  }
+
   const out = (students || []).map((s) => {
     const st = stateBy[s.id];
     const cycle = st?.state?.cycle || {};
@@ -83,9 +102,14 @@ Deno.serve(async (req: Request) => {
       coins: st?.coins ?? 0,
       crystals: st?.crystals ?? 0,
       lastActive: lastAt[s.id] || st?.updated_at || null,
+      lastLogin: s.last_login || null,
       attempts: totalBy[s.id] || 0,
       units: agg[s.id] || {},
       cleared: Object.keys(cycle).filter((k) => cycle[k]?.cleared),
+      log: (logBy[s.id] || []).map((r) => ({
+        createdAt: r.created_at, unitId: r.unit_id, level: r.level, mode: r.mode,
+        q: r.q, ans: r.ans, userAnswer: r.user_answer, ok: r.ok, mistakeTag: r.mistake_tag,
+      })),
     };
   });
 

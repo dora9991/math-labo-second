@@ -83,11 +83,13 @@ export default function ClassStats() {
                   </span>
                   <span style={{ fontSize: 11, fontWeight: 800, color: "#c7d2fe" }}>Lv.{s.level}</span>
                   <span style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,.6)" }}>{s.attempts}問{pctAll != null ? `・${pctAll}%` : ""}</span>
-                  <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)" }}>{fmtDate(s.lastActive)}</span>
+                  <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)" }}>
+                    {s.lastActive ? fmtDate(s.lastActive) : s.lastLogin ? `ログインのみ ${fmtDate(s.lastLogin)}` : "未ログイン"}
+                  </span>
                   <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>{open ? "▲" : "▼"}</span>
                 </button>
                 {open && (
-                  rows.length === 0 ? (
+                  rows.length === 0 && (s.log || []).length === 0 ? (
                     <div style={{ fontSize: 12, color: "rgba(255,255,255,.5)", padding: "8px 0 2px" }}>まだ記録がありません</div>
                   ) : (
                     <div style={{ marginTop: 8 }}>
@@ -112,6 +114,34 @@ export default function ClassStats() {
                           </div>
                         );
                       })}
+                      {/* 解答の中身（問題文・答え・正誤・誤答タグ）：直近30件・新しい順 */}
+                      {(s.log || []).length > 0 && (
+                        <div style={{ marginTop: 10, borderTop: "1px dashed rgba(255,255,255,.15)", paddingTop: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,.55)", marginBottom: 4 }}>
+                            📝 解答の中身（直近{s.log.length}件）
+                          </div>
+                          <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+                            {s.log.map((r, i) => (
+                              <div key={i} style={{
+                                fontSize: 11.5, padding: "5px 7px", borderRadius: 7,
+                                background: r.ok ? "rgba(74,222,128,.08)" : "rgba(248,113,113,.08)",
+                                border: `1px solid ${r.ok ? "rgba(74,222,128,.25)" : "rgba(248,113,113,.25)"}`,
+                              }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 6, color: "rgba(255,255,255,.4)", fontSize: 10 }}>
+                                  <span>{fmtDate(r.createdAt)}・{r.mode || "?"}</span>
+                                  <span>{r.ok ? "○ 正解" : "× 不正解"}</span>
+                                </div>
+                                <div style={{ color: "rgba(255,255,255,.85)", fontWeight: 700, wordBreak: "break-word" }}>{r.q || "(問題文なし)"}</div>
+                                <div style={{ color: "rgba(255,255,255,.6)" }}>
+                                  正解: <span style={{ color: "#4ade80", fontWeight: 800 }}>{r.ans ?? "—"}</span>
+                                  {!r.ok && <> ／ 解答: <span style={{ color: "#f87171", fontWeight: 800 }}>{r.userAnswer ?? "—"}</span></>}
+                                  {r.mistakeTag && <span style={{ marginLeft: 6, color: "#fbbf24" }}>🏷️ {r.mistakeTag}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 )}

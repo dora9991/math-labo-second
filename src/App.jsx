@@ -12,6 +12,7 @@ import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.
 import { AUTH_ENABLED } from "./auth/supabase.js";
 import { updateNickname, submitFeedback, getMyClassCode } from "./auth/kidAuth.js";
 import { getQuizWeakUnits } from "./data/quizLink.js";
+import { logAnswer } from "./store/answerLog.js";
 import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, questionCoin, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
@@ -740,7 +741,10 @@ export default function App() {
 
   function recordStepAttempt({ skill, unitId, level, templateId, seed, userAnswer, ok, q, ans, mNew, relearn = false, cycleSkip = false, mistakeTag = null }) {
     const sid = data.player.studentId;
-    shadowSubmit({ unitId, level, templateId, seed, userAnswer, mode: relearn ? "relearn" : cycleSkip ? "confirm" : "practice" });
+    const stepMode = relearn ? "relearn" : cycleSkip ? "confirm" : "practice";
+    shadowSubmit({ unitId, level, templateId, seed, userAnswer, mode: stepMode });
+    // 正答・誤答どちらも中身をサーバへ記録（教師が後から見返せるように。失敗しても進行には影響しない）。
+    logAnswer({ unitId, level, mode: stepMode, q, ans, userAnswer, ok, mistakeTag });
     // スキルタグがある中1のみ習熟度(Elo)を更新（中2・中3の固定問題は skill=null）
     // mNew は画面側Elo算出（StepUp/StepUpSimple）。バトル等で未指定なら、ここでElo更新する。
     const mFinal = skill == null ? null
