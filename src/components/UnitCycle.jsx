@@ -30,7 +30,6 @@ export default function UnitCycle({ player, grade = 1, cycleMap = {}, haichiPass
   const chapters = chaptersForGrade(grade);
   const [ci, setCi] = useState(0);
   const [tame, setTame] = useState(null); // ためす選択中の unitId
-  const [lect, setLect] = useState(null); // 講義選択中の unitId（はいち/教師モードをえらぶ）
   const ch = chapters[Math.min(ci, Math.max(0, chapters.length - 1))];
   if (!ch) return null;
   const units = ch.units || [];
@@ -139,19 +138,7 @@ export default function UnitCycle({ player, grade = 1, cycleMap = {}, haichiPass
               <div style={{ fontSize: 9.5, fontWeight: 800, color: "#86efac", margin: "-2px 0 6px" }}>💯 間違いゼロ！「なおす」は直すところなし</div>
             ) : null}
 
-            {lect === u.id ? (
-              // 講義のえらび：はいち動画 or 教師モード（どちらで学ぶ？）。動画が無い単元は教師モードのみ。
-              <>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {hasVideo && stepBtn(() => { setLect(null); onHaichi?.(u); }, "📺 はいち動画", "linear-gradient(135deg,#ef4444,#dc2626)", false, "葉一さんの動画＋プリントで学ぶ")}
-                  {stepBtn(() => { setLect(null); onTeacher?.(u); }, "🧑‍🏫 教師モード", "linear-gradient(135deg,#8b5cf6,#6366f1)", false, "黒板と会話で1問ずつ教わる")}
-                  {stepBtn(() => setLect(null), "← もどる", "rgba(255,255,255,.12)")}
-                </div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", marginTop: 5, textAlign: "center" }}>
-                  {hasVideo ? "どちらかで学んだら「確認問題」で講義クリア！" : "教師モードの中の「確認問題」で講義クリア！"}
-                </div>
-              </>
-            ) : tame === u.id ? (
+            {tame === u.id ? (
               <div style={{ display: "flex", gap: 6 }}>
                 {stepBtn(() => onPractice?.(ch, u), "✏️ れんしゅう", "linear-gradient(135deg,#22c55e,#10b981)", tameC, "じっくり計算して、確実にレベルアップしよう！")}
                 {stepBtn(() => onBattle?.(u), "⚔️ バトル", "linear-gradient(135deg,#ef4444,#b91c1c)", false, "制限時間内にモンスターを倒せるか！？")}
@@ -160,7 +147,8 @@ export default function UnitCycle({ player, grade = 1, cycleMap = {}, haichiPass
             ) : (
               <>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {stepBtn(() => hasVideo ? setLect(u.id) : onTeacher?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
+                  {/* 講義ははいち動画のみ。動画が無い単元（四則混合・確率など6単元）だけ教師モードにフォールバック */}
+                  {stepBtn(() => hasVideo ? onHaichi?.(u) : onTeacher?.(u), "📺 講義", "rgba(239,68,68,.5)", lectureC)}
                   {stepBtn(() => setTame(u.id), "✏️ ためす", "rgba(34,197,94,.5)", tameC)}
                   {stepBtn(() => onRelearn?.(u), "📖 なおす", "rgba(99,102,241,.5)", naosuDone)}
                   {stepBtn(() => onChallenge?.(ch, u), "🧮 応用",
