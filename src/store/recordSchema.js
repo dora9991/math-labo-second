@@ -59,8 +59,11 @@ export function makeRecord({
 /**
  * 間違えた問題の記録を作る（間違いノート＆教員分析の元データ）。
  * skill / templateId を持たせ、スキル単位の弱点分析・診断に使えるようにする。
+ * mistakeTag：生徒が実際に選んだ誤答選択肢の診断タグ（とけた!のdistractors[].tag。
+ *   例 "sign-flip"＝符号の取り違え）。skillが「どの単元/スキルか」なのに対し、
+ *   mistakeTagは「どう間違えたか（誤概念の種類）」を表す別の軸。無ければnull。
  */
-export function makeMistake({ studentId, chapterId, unitId, level, q, ans, skill = null, templateId = null }) {
+export function makeMistake({ studentId, chapterId, unitId, level, q, ans, skill = null, templateId = null, mistakeTag = null }) {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     studentId,
@@ -71,6 +74,7 @@ export function makeMistake({ studentId, chapterId, unitId, level, q, ans, skill
     ans,
     skill,            // どのスキルの問題か（data/skills.js の id）
     templateId,       // どのテンプレか（再出題・分析用）
+    mistakeTag,       // どう間違えたか（診断タグ。data/toketa/*.js の distractors[].tag）
     createdAt: now(),
   };
 }
@@ -120,6 +124,7 @@ export function initialPlayerState(studentId) {
     unitMastery: {},   // { unitId: { pt:0〜100, streak:連続正解数, ok:bool } } 小単元の習得確認（4連続正解でOK）
     navLevel: {},      // { unitId: "advanced" } れんしゅうの到達難易度。5問区切りをまたいで引き継ぐ
     tagWrong: {},      // { skillTag: 累計まちがい数 } 同じタグで2問まちがえたら学び直しへ（出したら0に戻す）
+    mistakeTagStats: {}, // { 診断タグ: {count, unitId, lastDate} } 誤答の「価値づけ」＝どの誤概念で何回間違えたかの累計（減らない・学び直しノートの増減とは独立）
     enemyDex: {},      // { monsterId: { enc:遭遇回数, moves:{技kind:true}, defeated:bool } } 敵図鑑（負けても埋まる）
     noVideoLecturePassed: {}, // { unitId: 日付 } 葉一動画が無い単元の講義クリア（教師モード＋確認問題5問80%で合格）
     partners: {},      // なかま（エサで仲間にしたモンスター）{ monsterId: { lv } }。コイン/クリスタルで育成
@@ -164,6 +169,7 @@ export function normalizePlayerState(p) {
   out.unitMastery = p.unitMastery || {};
   out.navLevel = (p.navLevel && typeof p.navLevel === "object") ? p.navLevel : {};
   out.tagWrong = (p.tagWrong && typeof p.tagWrong === "object") ? p.tagWrong : {};
+  out.mistakeTagStats = (p.mistakeTagStats && typeof p.mistakeTagStats === "object") ? p.mistakeTagStats : {};
   out.enemyDex = (p.enemyDex && typeof p.enemyDex === "object") ? p.enemyDex : {};
   out.noVideoLecturePassed = (p.noVideoLecturePassed && typeof p.noVideoLecturePassed === "object") ? p.noVideoLecturePassed : {};
   out.readAloud = !!p.readAloud; // ★5 設定（既定OFF）

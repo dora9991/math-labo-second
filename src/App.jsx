@@ -165,6 +165,18 @@ export default function App() {
     });
   }
 
+  // 誤答タグの累計（価値づけ）：診断タグ付きdistractorで間違えるたびに積み上がる、自分専用の「誤答パターン地図」。
+  //  学び直しノート(mistakes)の増減とは独立で、消えずに積み上がり続ける（skillStatsと同じ思想）。
+  function bumpMistakeTag(tag, unitId) {
+    if (!tag) return;
+    updatePlayer((p) => {
+      const stats = { ...(p.mistakeTagStats || {}) };
+      const prev = stats[tag] || { count: 0, unitId: null, lastDate: null };
+      stats[tag] = { count: prev.count + 1, unitId: unitId || prev.unitId, lastDate: todayStr() };
+      return { ...p, mistakeTagStats: stats };
+    });
+  }
+
   // ログイン制でニックネーム未設定（新規登録直後など）なら、ログインIDを初期値として入れる。
   //  ＝「最初はIDが名前として認識」。あとは設定（キャラクター画面）でいつでも変更可能。
   useEffect(() => {
@@ -434,23 +446,29 @@ export default function App() {
     //  スキルタグが無い誤答は、この回のなかで同じ小単元2件でフォールバック。
     const wrongs = (results || []).filter((r) => !r.ok);
     const tw = { ...(data.player.tagWrong || {}) };
+    // 誤答タグの累計（価値づけ）：学び直しノートに出るかどうかに関わらず、間違えた瞬間に全件積み上げる。
+    const mts = { ...(data.player.mistakeTagStats || {}) };
     const unitCount = {};
     const toAdd = [];
     for (const r of wrongs) {
+      if (r.mistakeTag) {
+        const prev = mts[r.mistakeTag] || { count: 0, unitId: null, lastDate: null };
+        mts[r.mistakeTag] = { count: prev.count + 1, unitId: r.unitId || unit.id, lastDate: todayStr() };
+      }
       const tag = r.skill;
       if (tag) {
         tw[tag] = (tw[tag] || 0) + 1;
         if (tw[tag] >= 2) {
-          toAdd.push({ chapterId: chapter.id, unitId: r.unitId || unit.id, level: r.level || level, q: r.q, ans: r.ans });
+          toAdd.push({ chapterId: chapter.id, unitId: r.unitId || unit.id, level: r.level || level, q: r.q, ans: r.ans, mistakeTag: r.mistakeTag });
           tw[tag] = 0; // 学び直しに出したのでカウンタをリセット
         }
       } else {
         const uid = r.unitId || unit.id;
         unitCount[uid] = (unitCount[uid] || 0) + 1;
-        if (unitCount[uid] === 2) toAdd.push({ chapterId: chapter.id, unitId: uid, level: r.level || level, q: r.q, ans: r.ans });
+        if (unitCount[uid] === 2) toAdd.push({ chapterId: chapter.id, unitId: uid, level: r.level || level, q: r.q, ans: r.ans, mistakeTag: r.mistakeTag });
       }
     }
-    updatePlayer((p) => ({ ...p, tagWrong: tw }));
+    updatePlayer((p) => ({ ...p, tagWrong: tw, mistakeTagStats: mts }));
     const mistakes = toAdd.map((m) => makeMistake({ studentId: sid, ...m }));
     const newMistakes = store.addMistakes(mistakes);
     setData((d) => ({ ...d, records: store.load().records, mistakes: newMistakes }));
@@ -706,7 +724,7 @@ export default function App() {
     }
   }
 
-  function recordStepAttempt({ skill, unitId, level, templateId, seed, userAnswer, ok, q, ans, mNew, relearn = false, cycleSkip = false }) {
+  function recordStepAttempt({ skill, unitId, level, templateId, seed, userAnswer, ok, q, ans, mNew, relearn = false, cycleSkip = false, mistakeTag = null }) {
     const sid = data.player.studentId;
     shadowSubmit({ unitId, level, templateId, seed, userAnswer, mode: relearn ? "relearn" : cycleSkip ? "confirm" : "practice" });
     // スキルタグがある中1のみ習熟度(Elo)を更新（中2・中3の固定問題は skill=null）
@@ -727,9 +745,10 @@ export default function App() {
     bumpUnitMastery(unitId, [!!ok]);
     // 学び直しへの追加：不正解は全件記録（学び直し中(relearn)は新たな間違いを足さない＝直している最中なので）。
     if (!relearn && !ok) {
-      const m = makeMistake({ studentId: sid, chapterId: skill ? "c1" : null, unitId, level, q, ans, skill, templateId });
+      const m = makeMistake({ studentId: sid, chapterId: skill ? "c1" : null, unitId, level, q, ans, skill, templateId, mistakeTag });
       const newMistakes = store.addMistakes([m]);
       setData((d) => ({ ...d, mistakes: newMistakes }));
+      bumpMistakeTag(mistakeTag, unitId);
     }
     // 学び直しは「学習のコア」：XP1.5倍（1問15）＋コイン（questionCoin()で他モードと統一）。
     //  ※クリスタルは「サイクルクリア（1単元）＝1個」だけに一本化（ドリップ廃止）。

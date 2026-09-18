@@ -14,6 +14,7 @@ import MathText from "../components/MathText.jsx";
 import { findUnitById, findChapterByUnitId } from "../data/index.js";
 import { videoUrlFor } from "../data/videoLinks.js";
 import { hasHaichiLessonForUnit } from "../data/haichiCourse.js";
+import { MISC as TOKETA_MISC } from "../data/toketa/index.js";
 
 const GRADE_LABEL = { 1: "中1", 2: "中2", 3: "中3" };
 
@@ -44,6 +45,23 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
       <div className="content">
         <div className="pg-ttl">{focusUnitId ? `📖 学び直し・${focusUnit ? focusUnit.name : "この単元"}` : "🩹 弱点克服モード"}</div>
         <div className="pg-sub">まちがいは<b style={{ color: "#fde047" }}>たからもの</b>。<b style={{ color: "#7dd3fc" }}>2回れんぞく正解</b>でなおせて、<b style={{ color: "#86efac" }}>つぎの日にもう1問</b>とけたらカンペキ（ノートから消える）。1問 +15XP。</div>
+        {/* よくあるまちがいパターン（誤答タグの累計＝価値づけの分析結果）。全体一覧のときだけ表示 */}
+        {!focusUnitId && (() => {
+          const stats = player?.mistakeTagStats || {};
+          const top = Object.entries(stats).filter(([, s]) => s.count > 0).sort((a, b) => b[1].count - a[1].count).slice(0, 3);
+          if (!top.length) return null;
+          return (
+            <div className="glass" style={{ padding: "10px 12px", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>📊 よくあるまちがいパターン</div>
+              {top.map(([tag, s]) => (
+                <div key={tag} style={{ fontSize: 12.5, color: "rgba(255,255,255,.8)", padding: "2px 0" }}>
+                  {TOKETA_MISC[tag]?.label || tag} × {s.count}回
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* この単元だけ表示中：全部の弱点一覧へ */}
         {focusUnitId && onSeeAll && (
           <button data-sfx="none" onClick={onSeeAll} style={{ margin: "0 0 10px", padding: "9px 12px", borderRadius: 10, cursor: "pointer",
@@ -128,6 +146,9 @@ export default function Relearn({ player, mistakes = [], onRelearn, onHaichi, on
                   <div key={m.id} style={{ padding: "7px 0", borderTop: "1px solid rgba(255,255,255,.08)" }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", wordBreak: "break-word" }}><MathText>{m.q}</MathText></div>
                     <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>正解: <strong style={{ color: "#4ade80" }}><MathText>{m.ans}</MathText></strong></div>
+                    {m.mistakeTag && TOKETA_MISC[m.mistakeTag] && (
+                      <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 2 }}>🏷️ {TOKETA_MISC[m.mistakeTag].label}</div>
+                    )}
                   </div>
                 ))}
               </div>

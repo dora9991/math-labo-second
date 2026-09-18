@@ -29,6 +29,10 @@ const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
 const choicesFor = (q) => (q?.toketa && Array.isArray(q.distractors) ? shuffle(q.distractors.map((d) => String(d.val)))
   : hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans));
 const ansEq = (val, q) => hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans);
+// 選んだ選択肢の値から、その誤答の診断タグを引く（toketa問題のみ。無ければnull＝正解 or 非toketa）
+const tagForChoice = (q, val) => (q?.toketa && Array.isArray(q.distractors))
+  ? (q.distractors.find((d) => String(d.val) === String(val))?.tag || null)
+  : null;
 
 export default function StepUpSimple({ player, units = [], title = "ステップアップ", onAttempt, onHome, roundSize = ROUND_SIZE, passRate = null, onRoundEnd, weakUnits = [], onRelearn, onHaichi, onOpenRelearnList, failAction = null, passActions = null }) {
   const ROUND = roundSize > 0 ? roundSize : ROUND_SIZE;
@@ -92,7 +96,7 @@ export default function StepUpSimple({ player, units = [], title = "ステップ
     setDone(r.n);
     const roundDone = r.n >= ROUND;
 
-    onAttempt?.({ skill: null, unitId: unit.id, level, templateId: problem.id, seed: problem.seed ?? null, ok, q: problem.q, ans: problem.ans, userAns: String(choice), userAnswer: String(choice), mNew: null });
+    onAttempt?.({ skill: null, unitId: unit.id, level, templateId: problem.id, seed: problem.seed ?? null, ok, q: problem.q, ans: problem.ans, userAns: String(choice), userAnswer: String(choice), mNew: null, mistakeTag: ok ? null : tagForChoice(problem, choice) });
 
     if (ok) advanceTimer.current = setTimeout(() => (roundDone ? finishRound() : next()), AUTO_NEXT_MS);
   }

@@ -36,6 +36,10 @@ const hasChoices = (q) => Array.isArray(q.choices) && q.choices.length > 0;
 // toketa 問題は診断タグ付き distractors を4択に使う（誤答の意味を持たせる）
 const choicesFor = (q) => (q?.toketa && Array.isArray(q.distractors) ? shuffle(q.distractors.map((d) => String(d.val)))
   : hasChoices(q) ? shuffle([...q.choices]) : makeChoices(q.ans));
+// 選んだ選択肢の値から、その誤答の診断タグを引く（toketa問題のみ。無ければnull＝正解 or 非toketa）
+const tagForChoice = (q, val) => (q?.toketa && Array.isArray(q.distractors))
+  ? (q.distractors.find((d) => String(d.val) === String(val))?.tag || null)
+  : null;
 const ansEq = (val, q) => (hasChoices(q) ? String(val).replace(/\s/g, "") === String(q.ans).replace(/\s/g, "") : isCorrect(val, q.ans));
 
 // 正負(u1〜u5)は toketa のヒント付き問題に差し替え。無ければ seed 付き生成（サーバー採点の下地）。
@@ -157,7 +161,8 @@ export default function SlowMode({ player, chapter, unit, level, anshin = false,
       }
     } else {
       // 間違えた問題を学び直しへ送るため記録（あんしん／じっくり両方）。skillタグも付ける。
-      wrongsRef.current.push({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level, skill: q.skill, ok: false });
+      // mistakeTag＝選んだ誤答選択肢の診断タグ（toketa問題のみ・誤答の「価値づけ」に使う）
+      wrongsRef.current.push({ q: q.q, ans: q.ans, unitId: q.unitId, level: q.level, skill: q.skill, ok: false, mistakeTag: tagForChoice(q, val) });
       // ★1 あんしんモードは失敗で階段が減らない（やさしい言葉かけ）
       if (!anshin) setStreak(0);
       sfx.wrong();
