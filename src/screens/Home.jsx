@@ -19,6 +19,7 @@ export default function Home({
   onChallenge, onRelearn, onWeakness, onUnitHaichi, onUnitTeacher, onUnitPractice, onUnitBattle, onDiagnose, onBattle,
   onBossChallenge, onStatusMeter, onUnitBoss, onLoadout, onItems, onUltimates, onStudyLog,
   onDetail, onCharacter, onFeedback,
+  quizWeakUnits = [], onQuizWeakUnitClick,
 }) {
   const availGrades = gradesWithChapters();
   const [msg] = useState(() => voice("open"));
@@ -32,6 +33,22 @@ export default function Home({
       <div className="content" style={{ position: "relative", zIndex: 1 }}>
         {/* アップデート情報（最上部・折りたたみ。最新のタイトルだけ見えて、タップで全履歴） */}
         <UpdateNews />
+
+        {/* 小テストアプリ(quiz)との連携：正答率の低かった回に対応する単元を「苦手みつかった」として案内 */}
+        {quizWeakUnits.length > 0 && (
+          <div className="glass" style={{ padding: "10px 12px", marginBottom: 12, border: "1px solid rgba(251,191,36,.4)" }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "#fbbf24", marginBottom: 6 }}>📋 小テストで苦手が見つかったよ</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {quizWeakUnits.map((u) => (
+                <button key={u.unitId} data-sfx="none" onClick={() => onQuizWeakUnitClick?.(u.unitId)}
+                  style={{ textAlign: "left", padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer",
+                    fontSize: 12.5, fontWeight: 800, color: "#3a2a00", background: "#fbbf24" }}>
+                  {u.name} を数学ラボで復習する →
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 学年えらび（中1・中2・中3を3列・大きく・携帯でも押しやすく） */}
         <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>

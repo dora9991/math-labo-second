@@ -80,6 +80,20 @@ export async function loginKid(id, pin) {
 
 export async function signOutKid() { if (supabase) await supabase.auth.signOut(); }
 
+/** ログイン中の生徒の登録ID（students.class_code＝本人が決めたID）を取得。quiz連携などID突合に使う。取れなければnull。 */
+export async function getMyClassCode() {
+  if (!supabase) return null;
+  try {
+    const { data: ud } = await supabase.auth.getUser();
+    const uid = ud?.user?.id;
+    if (!uid) return null;
+    const { data } = await supabase.from("students").select("class_code").eq("id", uid).single();
+    return data?.class_code || null;
+  } catch {
+    return null;
+  }
+}
+
 // students テーブルに名前・IDを記録（表示と教師ダッシュボード用）。RLS：本人のみ。
 //  ※ class_code 列は元は「クラスコード」用だったが、今はログインIDをそのまま入れる。
 async function upsertStudent(uid, name, loginId) {

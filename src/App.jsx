@@ -10,7 +10,8 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import * as store from "./store/localStore.js"; // ★将来ここを supabase.js に差し替える
 import { submitAttempt, serverActive, loadServerState } from "./sync/serverSync.js"; // サーバー権威(Lv2)。AUTH無効時はno-op
 import { AUTH_ENABLED } from "./auth/supabase.js";
-import { updateNickname, submitFeedback } from "./auth/kidAuth.js";
+import { updateNickname, submitFeedback, getMyClassCode } from "./auth/kidAuth.js";
+import { getQuizWeakUnits } from "./data/quizLink.js";
 import { getRememberedId } from "./auth/loginPrefs.js";
 import { makeRecord, makeMistake } from "./store/recordSchema.js";
 import { levelFromXp, xpForLevel, playerLevel, playerXp, timeAttackCrystal, RELEARN_XP_PER_CORRECT, questionCoin, CYCLE_PRACTICE_TARGET, CYCLE_RELEARN_TARGET, MASTER_CYCLE_COIN, MASTER_CYCLE_CRYSTAL, isUnitCycleCleared, REST_CYCLES_SOFT, restMultiplier, RELEARN_STREAK_TARGET, RELEARN_CONFIRM_COIN } from "./engine/scoring.js";
@@ -205,6 +206,19 @@ export default function App() {
         worldCleared: s.worldCleared || p.worldCleared,
         haichiPassed: { ...(p.haichiPassed || {}), ...(s.haichiPassed || {}) },
       }));
+    });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line
+
+  // 小テストアプリ(quiz/)との連携：ログインIDが小テストの学籍ID(E-101236形式)と同じなら、
+  //  小テストで正答率の低かった回を数学ラボ2の単元にマップして「苦手みつかった」に出す。
+  //  取れなくても（quiz未登録・通信エラー等）何もしない＝本体の動作に影響しない。
+  const [quizWeakUnits, setQuizWeakUnits] = useState([]);
+  useEffect(() => {
+    if (!AUTH_ENABLED) return;
+    let alive = true;
+    getMyClassCode().then((code) => getQuizWeakUnits(code)).then((units) => {
+      if (alive) setQuizWeakUnits(units);
     });
     return () => { alive = false; };
   }, []); // eslint-disable-line
@@ -2236,6 +2250,12 @@ export default function App() {
       onUnitTeacher={(unit) => { const ch = findChapterByUnitId(unit.id); setTeacherFocus({ chapterId: ch?.id || null, unit }); setScreen("teacherMode"); }}
       onDiagnose={(ch) => { setDiagnoseChapter(ch); setScreen("diagnose"); }}
       onUnitPractice={(chapter, unit) => { setSel({ chapter, unit, level: "standard", nav: true }); setScreen("anshin"); }}
+      quizWeakUnits={quizWeakUnits}
+      onQuizWeakUnitClick={(unitId) => {
+        const unit = findUnitById(unitId);
+        const chapter = findChapterByUnitId(unitId);
+        if (unit && chapter) { setSel({ chapter, unit, level: "standard", nav: true }); setScreen("anshin"); }
+      }}
       onUnitBattle={(unit) => goBattleForUnit(unit)}
       onClinic={() => setScreen("clinic")}
       onUnitTest={() => { setUtChapter(null); setScreen("unitTest"); }}
