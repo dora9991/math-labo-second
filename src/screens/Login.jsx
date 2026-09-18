@@ -68,7 +68,9 @@ export default function Login({ onDone }) {
 
         <div style={{ textAlign: "left", marginBottom: 12 }}>
           <div style={lbl}>ID</div>
-          <input style={inp} value={id} onChange={(e) => setId(e.target.value)} placeholder="IDを入れてください。（例：1204）" autoCapitalize="off" autoCorrect="off" />
+          <input style={inp} value={id} onChange={(e) => setId(e.target.value)}
+            placeholder={isRegister ? "例：E-101236（小テストと同じIDだと連携できるよ）" : "IDを入れてください。（例：1204）"}
+            autoCapitalize="off" autoCorrect="off" />
         </div>
 
         <div style={{ textAlign: "left", marginBottom: 10 }}>
@@ -102,7 +104,7 @@ export default function Login({ onDone }) {
 
         <div style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", marginTop: 14, lineHeight: 1.6 }}>
           {isRegister
-            ? <>IDと合言葉は自分で決めよう。わすれないようにメモしておいてね！<br />ニックネーム（呼び名）は はじめはIDと同じ。あとから「🎨キャラクター」でいつでも変えられるよ。</>
+            ? <>IDと合言葉は自分で決めよう。わすれないようにメモしておいてね！<br />ニックネーム（呼び名）は はじめはIDと同じ。あとから「🎨キャラクター」でいつでも変えられるよ。<br />小テストアプリを使っているクラスは、そちらと同じIDにすると先生が名寄せしやすいよ。</>
             : <>ID・合言葉を わすれた人は先生に相談してね。</>}
         </div>
       </form>
